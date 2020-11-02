@@ -1,6 +1,7 @@
 #include "../include/ft_ping.h"
 
 void	work(t_ping *ping);
+
 void	check_parametes(t_ping *ping, int ac, char **av)
 {
 	
@@ -37,12 +38,23 @@ unsigned short CalcChecksum (unsigned char *pBuffer, int nLen)
 	return ((unsigned short) nSum);
 }
 
-unsigned char checksum (unsigned char *ptr, size_t sz)
+unsigned short checksum(void *pBuf, int nLen)
 {
-   	unsigned char chk = 0;
-    while (sz-- != 0)
-        chk -= *ptr++;
-    return chk;
+	unsigned int	sum;
+	unsigned short	*buf;
+
+	sum = 0;
+	buf = pBuf;
+	while (nLen > 1)
+	{
+		sum += *buf;
+		buf++;
+		nLen -= sizeof(unsigned short);
+	}
+	if (nLen == 1)
+		sum += *(unsigned char *)buf;
+	sum = (sum >> 16) + (sum &  0xffff);
+	return (((unsigned short)~sum));
 }
 
 /*
@@ -144,7 +156,7 @@ struct icmp	infill_icmp_heder(void)
 	icmp_heder.icmp_type = ICMP_ECHO;
 	icmp_heder.icmp_code = 0;
 	icmp_heder.icmp_cksum = 0;
-	icmp_heder.icmp_hun.ih_idseq.icd_id = htons(getpid());
+	icmp_heder.icmp_hun.ih_idseq.icd_id = getpid();
 	icmp_heder.icmp_hun.ih_idseq.icd_seq = 0;
 	return (icmp_heder);
 }
@@ -206,15 +218,15 @@ void	sendto_icmp(t_ping *ping)
 	{
 		ft_memset(&data, 0, sizeof(data));
 		ping->icmp_heder = infill_icmp_heder();
-		ping->icmp_heder.icmp_hun.ih_idseq.icd_seq = htons(sequence++);
+		ping->icmp_heder.icmp_hun.ih_idseq.icd_seq = sequence++;
 		ft_memcpy(data, &ping->icmp_heder, sizeof(ping->icmp_heder));
 		if (gettimeofday(&time_send, NULL) == -1)
 			sys_err("Error: gettimeofday.\n");
 		ft_memcpy(data + sizeof(ping->icmp_heder), &time_send,
 				sizeof(time_send));
 		//ping->icmp_heder.icmp_cksum = 0;
-		ping->icmp_heder.icmp_cksum = htons(CalcChecksum((unsigned char *)data,
-				sizeof(ping->icmp_heder) + sizeof(time_send)));
+		ping->icmp_heder.icmp_cksum = checksum(data,
+				sizeof(ping->icmp_heder) + sizeof(time_send));
 		ft_memcpy(data, &ping->icmp_heder, sizeof(ping->icmp_heder));
 		if ((count = sendto(ping->fd_socket, data,
 					sizeof(ping->icmp_heder) + sizeof(time_send), 0,
