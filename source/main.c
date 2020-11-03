@@ -1,43 +1,17 @@
 #include "../include/ft_ping.h"
 
-void	work(t_ping *ping);
+void	work();
 
-void	check_parametes(t_ping *ping, int ac, char **av)
+void	check_parametes(int ac, char **av)
 {
-	
+	// g_ping	
 }
 
-unsigned short CalcChecksum (unsigned char *pBuffer, int nLen)
-{
-	//Checksum for ICMP is calculated in the same way as for
-	//IP header
-
-	//This code was taken from: http://www.netfor2.com/ipsum.htm
-
-	unsigned short nWord;
-	unsigned int nSum = 0;
-	int i;
-
-	//Make 16 bit words out of every two adjacent 8 bit words in the packet
-	//and add them up
-	for (i = 0; i < nLen; i = i + 2)
-	{
-		nWord =((pBuffer [i] << 8)& 0xFF00) + (pBuffer [i + 1] & 0xFF);
-		nSum = nSum + (unsigned int)nWord;
-	}
-
-	//Take only 16 bits out of the 32 bit sum and add up the carries
-	while (nSum >> 16)
-	{
-		nSum = (nSum & 0xFFFF) + (nSum >> 16);
-	}
-
-	//One's complement the result
-	nSum = ~nSum;
-
-	return ((unsigned short) nSum);
-}
-
+/*
+** Создание checksum хедера icmp.
+** Все сообщение делится на 16-ти битные слова. Все слова складываются.
+** В конце все биты инвентируются (~).
+*/
 unsigned short checksum(void *pBuf, int nLen)
 {
 	unsigned int	sum;
@@ -63,6 +37,7 @@ unsigned short checksum(void *pBuf, int nLen)
 ** Тип			SOCK_DGRAM		Не ориентирован на создание лог. соединения
 ** Протокол		IPPROTO_ICMP	Протокол управляющих сообщений Интернета
 ** Данный тип необходимо использовать для открытия сокета не для root.
+** Устанавливается таймер на получение ответного сообщения (SO_RCVTIMEO)
 */
 
 int	open_icmp_socket(struct addrinfo *hints)
@@ -74,6 +49,7 @@ int	open_icmp_socket(struct addrinfo *hints)
 	temp = 1;
 	if ((fd_socket = socket(
 					AF_INET,
+					//SOCK_RAW,
 					SOCK_DGRAM,
 					IPPROTO_ICMP)) == -1)
 		sys_err("Error: open socket\n");
@@ -144,21 +120,21 @@ void	print_list_adrinfo(struct addrinfo *hints)
 ** Тип эхо-запроса	ICMP_ECHO	- 8
 ** Код эхо-запроса				- 0
 ** Хеш сумма эхо-запроса		- 0
-** Id процесса					- getpid()
+** Id запущенного процесса		- getpid()
 ** Порядковый номер запроса 	- 0
 */
 
-struct icmp	infill_icmp_heder(void)
+void	infill_icmp_heder(void)
 {
 	struct icmp icmp_heder;
 
-	ft_memset(&icmp_heder, 0, sizeof(struct icmp));
-	icmp_heder.icmp_type = ICMP_ECHO;
-	icmp_heder.icmp_code = 0;
-	icmp_heder.icmp_cksum = 0;
-	icmp_heder.icmp_hun.ih_idseq.icd_id = getpid();
-	icmp_heder.icmp_hun.ih_idseq.icd_seq = 0;
-	return (icmp_heder);
+	ft_memset(&g_ping.icmp_heder_send, 0, sizeof(struct icmp));
+	g_ping.icmp_heder_send.icmp_type = ICMP_ECHO;
+	g_ping.icmp_heder_send.icmp_code = 0;
+	g_ping.icmp_heder_send.icmp_cksum = 0;
+	g_ping.icmp_heder_send.icmp_hun.ih_idseq.icd_id = getpid();
+	g_ping.icmp_heder_send.icmp_hun.ih_idseq.icd_seq = 0;
+	//return (icmp_heder);
 }
 
 void	print_bits(void *src, size_t len)
@@ -171,133 +147,124 @@ void	print_bits(void *src, size_t len)
 	ft_putendl("");
 }
 
-void	recvest_message(t_ping *ping)
-{
-	int    rc, len;
-	int    worker_sd, pass_sd;
-	unsigned char   buffer[512];
-	struct iovec   iov[1];
-	struct msghdr  msg;
+/*
+** Проверка checksum входного icmp сообщения.
+** Сохранение ip хедера.
+** Созранение icmp хедера.
+** Созранение временной точки отправления (struct timeval).
+*/
 
-	worker_sd = ping->fd_socket;
-	//worker_sd = 0;
-	memset(&msg,   0, sizeof(msg));
-	memset(iov,    0, sizeof(iov));
+int		check_recvmsg(unsigned char *buf, int len)
+{
+	struct icmp		recv_icmp;
+	unsigned short	temp;
+	
+	if (len !=  sizeof(struct ip) + sizeof(struct icmp) + sizeof(struct timeval))	
+		return (-1);
+	ft_memcpy(&recv_icmp, buf + sizeof(struct ip), sizeof(struct icmp));
+	g_ping.icmp_heder_recv = recv_icmp;
+	if (recv_icmp.icmp_type != 0)
+		return (-1);
+	temp = recv_icmp.icmp_cksum;
+	recv_icmp.icmp_cksum = 0;
+	ft_memcpy(buf + sizeof(struct ip), &recv_icmp, sizeof(struct icmp)); 
+	if (temp != checksum(buf + sizeof(struct ip),
+				sizeof(struct icmp) + sizeof(struct timeval)))
+		return (-1);
+	ft_memcpy(&g_ping.ip_heder_recv, buf, sizeof(struct ip));
+	ft_memcpy(&g_ping.time_recv, buf + sizeof(struct ip) + sizeof(struct icmp),
+			sizeof(struct timeval));
+	return (1);
+}
+/*
+** Ожидание и получение входного сообщения.
+*/
+void	recvest_message(void)
+{
+	unsigned char	buffer[512];
+	struct iovec	iov[1];
+	struct msghdr	msg;
+
+	ft_memset(&msg, 0, sizeof(msg));
+	ft_memset(iov, 0, sizeof(iov));
 	iov[0].iov_base = &buffer;
 	iov[0].iov_len  = sizeof(buffer);
 	msg.msg_iov     = iov;
 	msg.msg_iovlen  = 1;
-	msg.msg_control    = (char *)&pass_sd;
-	msg.msg_controllen = sizeof(pass_sd);
+	//msg.msg_control    = (char *)&pass_sd;
+	//msg.msg_controllen = sizeof(pass_sd);
 	ft_printf("Waiting on recvmsg\n");
-	rc = recvmsg(worker_sd, &msg, 0);
-	if (rc < 0)
+	g_ping.count_recv_bits = recvmsg(g_ping.fd_socket, &msg, 0);
+	if (g_ping.count_recv_bits < 0)
 	{
 	  perror("recvmsg() failed");
 	  //close(worker_sd);
 	  //exit(-1);
 	}
-	ft_printf("rc = {%d}\n", rc);
-	//ft_printf("msg_data = {%s}\n", NLMSG_DATA(buffer));
-	//ft_printf("buffer = {%s}\n", buffer);
-	//print_bits(buffer, rc);
-	//close(ping->fd_socket);
-	//work(ping);
-	//sleep(5);
+	ft_printf("recv_len = {%d}\n", g_ping.count_recv_bits);
+	print_bits(buffer + 20, g_ping.count_recv_bits - 20);
+	if (check_recvmsg(buffer, g_ping.count_recv_bits) == -1)
+		sys_err("Error: recvest message.\n");
+	print_bits(&g_ping.ip_heder_recv, sizeof(struct ip));
+	print_bits(&g_ping.icmp_heder_recv, sizeof(struct icmp));
+	print_bits(&g_ping.time_recv, sizeof(struct timeval));
+	ft_printf("Hello!!\n\n");
 }
 
-void	sendto_icmp(t_ping *ping)
+void	sendto_icmp(void)
 {
 	int				sequence;
 	struct timeval	time_send;
 	int				count;
-	unsigned char	data[sizeof(ping->icmp_heder) + sizeof(time_send)];
+	unsigned char	data[sizeof(g_ping.icmp_heder_send) + sizeof(time_send)];
 
 	sequence = 0;
 	while(21)
 	{
 		ft_memset(&data, 0, sizeof(data));
-		ping->icmp_heder = infill_icmp_heder();
-		ping->icmp_heder.icmp_hun.ih_idseq.icd_seq = sequence++;
-		ft_memcpy(data, &ping->icmp_heder, sizeof(ping->icmp_heder));
+		infill_icmp_heder();
+		g_ping.icmp_heder_send.icmp_hun.ih_idseq.icd_seq = sequence++;
+		ft_memcpy(data, &g_ping.icmp_heder_send, sizeof(g_ping.icmp_heder_send));
 		if (gettimeofday(&time_send, NULL) == -1)
 			sys_err("Error: gettimeofday.\n");
-		ft_memcpy(data + sizeof(ping->icmp_heder), &time_send,
+		ft_memcpy(data + sizeof(g_ping.icmp_heder_send), &time_send,
 				sizeof(time_send));
 		//ping->icmp_heder.icmp_cksum = 0;
-		ping->icmp_heder.icmp_cksum = checksum(data,
-				sizeof(ping->icmp_heder) + sizeof(time_send));
-		ft_memcpy(data, &ping->icmp_heder, sizeof(ping->icmp_heder));
-		if ((count = sendto(ping->fd_socket, data,
-					sizeof(ping->icmp_heder) + sizeof(time_send), 0,
-					ping->result->ai_addr, sizeof(ping->result->ai_addr))) == -1)
+		g_ping.icmp_heder_send.icmp_cksum = checksum(data,
+				sizeof(g_ping.icmp_heder_send) + sizeof(time_send));
+		ft_memcpy(data, &g_ping.icmp_heder_send, sizeof(g_ping.icmp_heder_send));
+		if ((count = sendto(g_ping.fd_socket, data,
+				sizeof(g_ping.icmp_heder_send) + sizeof(time_send),
+				0, g_ping.result->ai_addr,
+				sizeof(g_ping.result->ai_addr))) == -1)
 			sys_err("Error: sendto.\n");
 		ft_printf("Send {%d} octets.\n", count);
-		print_bits(data, sizeof(ping->icmp_heder) + sizeof(time_send));
-		recvest_message(ping);
+		print_bits(data, sizeof(g_ping.icmp_heder_send) + sizeof(time_send));
+		recvest_message();
 	}
 }
 
-void	work(t_ping *ping)
+void	work(void)
 {
 	int				temp;
 	struct addrinfo	hints;
 
 	infill_struct_hints(&hints);
-	if ((temp = getaddrinfo("google.com", NULL, &hints, &ping->result)))
+	if ((temp = getaddrinfo("google.com", NULL, &hints, &g_ping.result)))
 	{
 		ft_printf("gai_strerror = %s\n", gai_strerror(temp));
 		sys_err("Error. getaddrinfo\n");
 	}
-	//print_list_adrinfo(ping->result);
-	ping->fd_socket = open_icmp_socket(ping->result);
-	ping->icmp_heder = infill_icmp_heder();
-	sendto_icmp(ping);
+	g_ping.fd_socket = open_icmp_socket(g_ping.result);
+	infill_icmp_heder();
+	sendto_icmp();
 }
 
 
 int main(int ac, char **av)
 {
-	t_ping ping;	
-
-	check_parametes(&ping, ac, av);
-	work(&ping);	
+	check_parametes(ac, av);
+	work();	
 
 	return (0);
 }
-/*
-void	ft_print_adr(char **argv)
-{
-	struct addrinfo *ailist, *aip;
-	struct addrinfo hint;
-	struct sockaddr_in *sinp;
-	const char *addr = NULL;
-	int err;
-	//char abuf[INET_ADDRSTRLEN];
-	hint.ai_flags = AI_CANONNAME;
-	hint.ai_family = 0;
-	hint.ai_socktype = 0;
-	hint.ai_protocol = 0;
-	hint.ai_addrlen = 0;
-	hint.ai_canonname = NULL;
-	hint.ai_addr = NULL;
-	hint.ai_next = NULL;
-	if ((err = getaddrinfo(argv[1], argv[2], &hint, &ailist)) != 0)
-		sys_err("ошибка вызова функции getaddrinfo:");
-	ft_printf("one %s, %s\n", argv[1], argv[2]);
-	for (aip = ailist; aip != NULL; aip = aip->ai_next)
-	{
-		printf("\n\tхост %s", aip->ai_canonname ? aip->ai_canonname: "-");
-		if (aip->ai_family == AF_INET)
-		{
-			sinp = (struct sockaddr_in *)aip->ai_addr;
-			printf(" адрес %s", addr?addr:"не известен");
-			printf(" порт %d", ntohs(sinp->sin_port));
-		}
-		printf("\n");
-	}
-	exit(0);
-
-}
-*/
-
