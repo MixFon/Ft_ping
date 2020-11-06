@@ -2,9 +2,43 @@
 
 void	work();
 
+void	print_usege(void)
+{
+	ft_printf("usage: ping [-hv] [-c count] destination\n");
+	ft_printf("\t-h help.\n");
+	ft_printf("\t-v verbose mode. Display additional information about ICMP.\n");
+	exit(-1);
+}
+
+void	check_char_flags(char c)
+{
+	if (c == 'h')
+		print_usege();
+	if (c == 'v')
+		g_ping.fl_v = 1;	
+	else
+	{
+		fprintf(stderr, "ping: -%c flag: Operation not permitted.\n", c);
+		exit(-1);
+	}
+}
+
+void	check_flags(char *flags)
+{
+	if (ft_strlen(flags) <= 1)
+		sys_err("ping: unrecognized option \'-\'\n");
+	while (*(++flags) != '\0')
+		check_char_flags(*flags);
+	ft_printf("Flags\n");
+	exit(-1);
+}
+
 void	check_parametes(int ac, char **av)
 {
-	// g_ping	
+	if (ac == 1)
+		print_usege();
+	if (av[1][0] == '-')
+		check_flags(av[1]);
 }
 
 /*
@@ -124,17 +158,14 @@ void	print_list_adrinfo(struct addrinfo *hints)
 ** Порядковый номер запроса 	- 0
 */
 
-void	infill_icmp_heder(void)
+void	infill_icmp_heder(struct icmp *icmp_heder)
 {
-	struct icmp icmp_heder;
-
-	ft_memset(&g_ping.icmp_heder_send, 0, sizeof(struct icmp));
-	g_ping.icmp_heder_send.icmp_type = ICMP_ECHO;
-	g_ping.icmp_heder_send.icmp_code = 0;
-	g_ping.icmp_heder_send.icmp_cksum = 0;
-	g_ping.icmp_heder_send.icmp_hun.ih_idseq.icd_id = getpid();
-	g_ping.icmp_heder_send.icmp_hun.ih_idseq.icd_seq = 0;
-	//return (icmp_heder);
+	ft_memset(icmp_heder, 0, sizeof(struct icmp));
+	icmp_heder->icmp_type = ICMP_ECHO;
+	icmp_heder->icmp_code = 0;
+	icmp_heder->icmp_cksum = 0;
+	icmp_heder->icmp_hun.ih_idseq.icd_id = getpid();
+	icmp_heder->icmp_hun.ih_idseq.icd_seq = 0;
 }
 
 void	print_bits(void *src, size_t len)
@@ -150,8 +181,8 @@ void	print_bits(void *src, size_t len)
 /*
 ** Проверка checksum входного icmp сообщения.
 ** Сохранение ip хедера.
-** Созранение icmp хедера.
-** Созранение временной точки отправления (struct timeval).
+** Сохранение icmp хедера.
+** Сохранение временной точки отправления сообщения (struct timeval).
 */
 
 int		check_recvmsg(unsigned char *buf, int len)
@@ -163,6 +194,8 @@ int		check_recvmsg(unsigned char *buf, int len)
 		return (-1);
 	ft_memcpy(&recv_icmp, buf + sizeof(struct ip), sizeof(struct icmp));
 	g_ping.icmp_heder_recv = recv_icmp;
+	if (recv_icmp.icmp_hun.ih_idseq.icd_id != getpid())
+		return (-1);
 	if (recv_icmp.icmp_type != 0)
 		return (-1);
 	temp = recv_icmp.icmp_cksum;
@@ -194,59 +227,116 @@ void	recvest_message(void)
 	//msg.msg_control    = (char *)&pass_sd;
 	//msg.msg_controllen = sizeof(pass_sd);
 	ft_printf("Waiting on recvmsg\n");
-	g_ping.count_recv_bits = recvmsg(g_ping.fd_socket, &msg, 0);
-	if (g_ping.count_recv_bits < 0)
+	while (21)
 	{
-	  perror("recvmsg() failed");
-	  //close(worker_sd);
-	  //exit(-1);
+		g_ping.count_recv_bits = recvmsg(g_ping.fd_socket, &msg, 0);
+		if (g_ping.count_recv_bits < 0)
+		  perror("recvmsg() failed");
+		ft_printf("recv_len = {%d}\n", g_ping.count_recv_bits);
+		print_bits(buffer + 20, g_ping.count_recv_bits - 20);
+		if (check_recvmsg(buffer, g_ping.count_recv_bits) == -1)
+			ft_printf("Invalit packege!!!!\n");
+		else
+			break;
+			//sys_err("error: recvest message. will delete.\n");
 	}
-	ft_printf("recv_len = {%d}\n", g_ping.count_recv_bits);
-	print_bits(buffer + 20, g_ping.count_recv_bits - 20);
-	if (check_recvmsg(buffer, g_ping.count_recv_bits) == -1)
-		sys_err("Error: recvest message.\n");
+	g_ping.count_recv_packege++;
 	print_bits(&g_ping.ip_heder_recv, sizeof(struct ip));
 	print_bits(&g_ping.icmp_heder_recv, sizeof(struct icmp));
 	print_bits(&g_ping.time_recv, sizeof(struct timeval));
-	ft_printf("Hello!!\n\n");
+	ft_printf("End!!\n\n");
+}
+
+char	*get_ip_str(void)
+{
+	struct sockaddr_in	*sinp;
+	char				*buf;
+
+	buf = ft_strnew(INET_ADDRSTRLEN);
+	sinp = (struct sockaddr_in *)g_ping.result->ai_addr;
+	inet_ntop(AF_INET, &sinp->sin_addr, buf, INET_ADDRSTRLEN);
+	return (buf);
+}
+
+double	get_time_diff(void)
+{
+	struct timeval	time_now;
+	double			time_diff;
+
+	if (gettimeofday(&time_now, NULL) == -1)
+		sys_err("Error: gettimeofday.\n");
+	time_diff = (time_now.tv_usec - g_ping.time_recv.tv_usec) / 1000.0;
+	if (time_diff < 0)
+		time_diff = g_ping.min_time_diff;
+	if (g_ping.max_time_diff < time_diff || g_ping.max_time_diff == 0)
+		g_ping.max_time_diff = time_diff;
+	if (g_ping.min_time_diff > time_diff || g_ping.min_time_diff == 0)
+		g_ping.min_time_diff = time_diff;
+	g_ping.sum_time_diff += time_diff;
+	g_ping.sum_sq_time_diff += (time_diff * time_diff);
+	return (time_diff);
+}
+
+void	print_rtt(void)
+{
+	char	*ip_str;
+	double	time_diff;
+	
+	ip_str = get_ip_str();
+	time_diff = get_time_diff();	
+	ft_printf("ip_str = {%s}\n", ip_str);
+	ft_printf("time_diff = {%.3f}\n", time_diff);
+	ft_printf("max_time_diff = {%.3f}\n", (double)g_ping.max_time_diff);
+	ft_printf("min_time_diff = {%.3f}\n", (double)g_ping.min_time_diff);
+	ft_printf("avr_time_diff = {%.3f}\n", ((double)g_ping.sum_time_diff /
+			(double)g_ping.icmp_heder_recv.icmp_hun.ih_idseq.icd_seq));
+	ft_printf(RTT_SRT, g_ping.count_recv_bits, ip_str,
+			g_ping.icmp_heder_recv.icmp_hun.ih_idseq.icd_seq,
+			g_ping.ip_heder_recv.ip_ttl,
+			time_diff);
+	free(ip_str);
+	//sleep(1);
 }
 
 void	sendto_icmp(void)
 {
-	int				sequence;
+	static int		sequence = 0;
 	struct timeval	time_send;
 	int				count;
-	unsigned char	data[sizeof(g_ping.icmp_heder_send) + sizeof(time_send)];
+	unsigned char	data[sizeof(struct icmp) + sizeof(struct timeval)];
+	struct icmp		icmp_heder;
 
-	sequence = 0;
-	while(21)
-	{
-		ft_memset(&data, 0, sizeof(data));
-		infill_icmp_heder();
-		g_ping.icmp_heder_send.icmp_hun.ih_idseq.icd_seq = sequence++;
-		ft_memcpy(data, &g_ping.icmp_heder_send, sizeof(g_ping.icmp_heder_send));
-		if (gettimeofday(&time_send, NULL) == -1)
-			sys_err("Error: gettimeofday.\n");
-		ft_memcpy(data + sizeof(g_ping.icmp_heder_send), &time_send,
-				sizeof(time_send));
-		//ping->icmp_heder.icmp_cksum = 0;
-		g_ping.icmp_heder_send.icmp_cksum = checksum(data,
-				sizeof(g_ping.icmp_heder_send) + sizeof(time_send));
-		ft_memcpy(data, &g_ping.icmp_heder_send, sizeof(g_ping.icmp_heder_send));
-		if ((count = sendto(g_ping.fd_socket, data,
-				sizeof(g_ping.icmp_heder_send) + sizeof(time_send),
-				0, g_ping.result->ai_addr,
-				sizeof(g_ping.result->ai_addr))) == -1)
-			sys_err("Error: sendto.\n");
-		ft_printf("Send {%d} octets.\n", count);
-		print_bits(data, sizeof(g_ping.icmp_heder_send) + sizeof(time_send));
-		recvest_message();
-	}
+	ft_memset(&data, 0, sizeof(data));
+	infill_icmp_heder(&icmp_heder);
+	icmp_heder.icmp_hun.ih_idseq.icd_seq = sequence++;
+	ft_memcpy(data, &icmp_heder, sizeof(struct icmp));
+	if (gettimeofday(&time_send, NULL) == -1)
+		sys_err("Error: gettimeofday.\n");
+	ft_memcpy(data + sizeof(struct icmp), &time_send,
+			sizeof(struct timeval));
+	//ping->icmp_heder.icmp_cksum = 0;
+	icmp_heder.icmp_cksum = checksum(data,
+			sizeof(struct icmp) + sizeof(struct timeval));
+	ft_memcpy(data, &icmp_heder, sizeof(struct icmp));
+	if ((count = sendto(g_ping.fd_socket, data,
+			sizeof(struct icmp) + sizeof(struct timeval),
+			0, g_ping.result->ai_addr,
+			sizeof(g_ping.result->ai_addr))) == -1)
+		sys_err("Error: sendto.\n");
+	ft_printf("Send {%d} octets.\n", count);
+	ft_printf("icmp + timeval {%d} octets.\n",
+			sizeof(struct icmp) + sizeof(struct timeval));
+	print_bits(data, sizeof(struct icmp) + sizeof(struct timeval));
+	g_ping.count_send_packege++;
+	recvest_message();
+	print_rtt();
+	alarm(1);
 }
 
-void	work(void)
+void	preparation_to_send(void)
 {
 	int				temp;
+	char			*ip_str;
 	struct addrinfo	hints;
 
 	infill_struct_hints(&hints);
@@ -256,15 +346,84 @@ void	work(void)
 		sys_err("Error. getaddrinfo\n");
 	}
 	g_ping.fd_socket = open_icmp_socket(g_ping.result);
-	infill_icmp_heder();
-	sendto_icmp();
+	ip_str = get_ip_str();
+	ft_printf(RTT_HEAD_SRT, "name", ip_str, 111);
+	free(ip_str);
+	//sendto_icmp();
 }
 
+double	get_average(void)
+{
+	return(g_ping.sum_time_diff / g_ping.count_recv_packege);
+}
+
+double	get_stddev(double avr)
+{
+	double res;
+
+	res = ABS(((g_ping.sum_sq_time_diff - 2 * avr * g_ping.sum_time_diff) +
+		avr * avr * g_ping.count_recv_packege) / g_ping.count_recv_packege);
+	ft_printf("res = {%f}\n", res);
+	return (sqrt(res));
+}
+
+double	get_percont_lost(void)
+{
+	double lost;
+
+	if (g_ping.count_recv_packege >= g_ping.count_send_packege)
+		return (0.0);	
+	lost = g_ping.count_send_packege - g_ping.count_recv_packege;
+	return (lost / (double)g_ping.count_send_packege * 100.0);
+}
+
+void	print_final_rtt(void)
+{
+	double stddev;
+	double avr;
+	double percent_lost;
+
+	avr = get_average();
+	stddev = get_stddev(avr);
+	percent_lost = get_percont_lost();
+	ft_printf("--- host_name_or_ip ping statistics ---\n");
+	ft_printf("%d packets transmitted, %d packets received, %.1f%% packet loss\n",
+			g_ping.count_send_packege,
+			g_ping.count_recv_packege,
+			percent_lost);
+	ft_printf("round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms\n",
+			g_ping.min_time_diff,
+			avr,
+			g_ping.max_time_diff,
+			stddev);
+	exit(0);
+}
+
+void	working_signals(int sig)
+{
+	ft_printf("sig = {%d}!!\n", sig);
+	if (sig == SIGINT)
+		print_final_rtt();		
+	else if (sig == SIGALRM)
+		sendto_icmp();
+}
+
+void	set_signals(void)
+{
+	signal(SIGALRM, working_signals);
+	signal(SIGINT, working_signals);
+}
 
 int main(int ac, char **av)
 {
 	check_parametes(ac, av);
-	work();	
-
+	set_signals();
+	preparation_to_send();	
+	sendto_icmp();
+	//ft_printf("alarm %d\n", alarm(2));
+	int i;
+	//alarm(1);
+	while(21)
+		i = 21;
 	return (0);
 }
