@@ -4,17 +4,53 @@ void	work();
 
 void	print_usege(void)
 {
-	ft_printf("usage: ping [-hv] [-c count] destination\n");
-	ft_printf("\t-h help.\n");
-	ft_printf("\t-v verbose mode. Display additional information about ICMP.\n");
+	fprintf(stderr, "usage: ping [-hv] [-c count] destination\n");
+	fprintf(stderr, "\t-c the number of packets to send.\n");
+	fprintf(stderr, "\t-h help.\n");
+	fprintf(stderr, "\t-v verbose mode. Display additional information about ICMP.\n");
 	exit(-1);
 }
 
-void	check_char_flags(char c)
+void	is_all_number(char *number)
+{
+	char *iter;
+
+	iter = number;
+	while (*iter != '\0')
+	{
+		if (!ft_isdigit(*iter))
+		{
+			fprintf(stderr, "ping: invalid count of packets to transmit: `%s'\n",
+					number);
+			exit(-1);
+		}
+		iter++;
+	}
+}
+/*
+** Проверяет, что следующий аргумент является числом.
+** Если аргумент число - возвращает это число.
+** Иначе выводит ошибку.
+*/
+int		check_number_param(char c, int *i, char **av)
+{
+	if (av[*i + 1] == NULL)
+	{
+		fprintf(stderr, "ping: option requires an argument -- %c\n", c);
+		print_usege();
+	}
+	is_all_number(av[*i + 1]);
+	(*i)++;
+	return (ft_atoi(av[*i]));
+}
+
+void	check_char_flags(char c, int *i, char **av)
 {
 	if (c == 'h')
 		print_usege();
-	if (c == 'v')
+	if (c == 'c')
+		g_ping.fl_c = check_number_param(c, i, av);
+	else if (c == 'v')
 		g_ping.fl_v = 1;	
 	else
 	{
@@ -23,22 +59,55 @@ void	check_char_flags(char c)
 	}
 }
 
-void	check_flags(char *flags)
+void	check_flags(int *i, char **av)
 {
+	char *flags;
+
+	flags = av[*i];
 	if (ft_strlen(flags) <= 1)
 		sys_err("ping: unrecognized option \'-\'\n");
 	while (*(++flags) != '\0')
-		check_char_flags(*flags);
-	ft_printf("Flags\n");
-	exit(-1);
+		check_char_flags(*flags, i, av);
+	//ft_printf("Flags\n");
+	//exit(-1);
+}
+
+void	infill_destination(char *destination)
+{
+	if (g_ping.destination != NULL)
+		print_usege();
+	g_ping.destination = ft_strdup(destination);
+}
+
+void	print_flags(void)
+{
+	ft_printf("-v ={%d}\n", g_ping.fl_v);
+	ft_printf("-c ={%d}\n", g_ping.fl_c);
+	ft_printf("destination = {%s}\n", g_ping.destination);
 }
 
 void	check_parametes(int ac, char **av)
 {
+	int i;
+
+	i = 0;
 	if (ac == 1)
 		print_usege();
-	if (av[1][0] == '-')
-		check_flags(av[1]);
+	if (av[1][0] == '\0')
+		print_usege();
+	ft_printf("ac = {%d} *av {%s}\n", ac, *av);
+	while (++i < ac)
+	{
+		ft_printf("av[%d] = {%s}\n",i ,av[i]);
+		if (av[i][0] == '-')
+			check_flags(&i, av);
+		else
+			infill_destination(av[i]);
+	}
+	if (g_ping.destination == NULL)
+		print_usege();
+	print_flags();
+	//exit(-1);
 }
 
 /*
@@ -178,6 +247,7 @@ void	print_bits(void *src, size_t len)
 	ft_putendl("");
 }
 
+
 /*
 ** Проверка checksum входного icmp сообщения.
 ** Сохранение ip хедера.
@@ -209,9 +279,90 @@ int		check_recvmsg(unsigned char *buf, int len)
 			sizeof(struct timeval));
 	return (1);
 }
+
+/*
+** Строчки сверху вниз. 
+** Версия ip пакета, размер ip (x4), тип обслуживания, размер пакета.
+** Идентификатор, флаги/смещение фрагмента.
+** Время жизни, протокол, котрольная сумма заголовка
+** Адрес источника, адрес назначения
+*/
+void	print_ip_packege(unsigned char *buffer, int len)
+{
+	struct ip			ip_heder;
+	struct sockaddr_in	*sinp;
+	char				*buf;
+
+	if (!g_ping.fl_v)
+		return;
+	buf = ft_strnew(INET_ADDRSTRLEN);
+	ft_memcpy(&ip_heder, buffer, sizeof(struct ip));
+	sinp = (struct sockaddr_in *)&ip_heder.ip_src;
+	inet_ntop(AF_INET, &sinp->sin_addr, buf, INET_ADDRSTRLEN);
+	ft_printf("\x1b[33m");
+	ft_printf("+---------------------------------------+\n");
+	ft_printf("|                IP HAEDER              |\n");
+	ft_printf("+----+----+---------+-------------------+\n");
+	ft_printf("| %.2d | %.2d | Type %.2x |    Length %.4d    |\n",
+			ip_heder.ip_v,
+			ip_heder.ip_hl,
+			ip_heder.ip_tos,
+			ip_heder.ip_len);
+	ft_printf("+---------+---------+-------------------+\n");
+	ft_printf("|    IP ID %.4x     |    Offset %.4x    |\n",
+			ip_heder.ip_id,
+			ip_heder.ip_off);
+	ft_printf("+---------+---------+-------------------+\n");
+	ft_printf("| TTL %.3d | Prot %.2x |   Checksum %.4x   |\n",
+			ip_heder.ip_ttl,
+			ip_heder.ip_p,
+			ip_heder.ip_sum);
+	ft_printf("+---------+---------+-------------------+\n");
+	ft_printf("|     Source            %-14s  |\n", buf);
+	sinp = (struct sockaddr_in *)&ip_heder.ip_dst;
+	inet_ntop(AF_INET, &sinp->sin_addr, buf, INET_ADDRSTRLEN);
+	ft_printf("+---------------------------------------+\n");
+	ft_printf("|     Dertanation       %-14s  |\n", buf);
+	ft_printf("\x1b[0m");
+	free(buf);
+}
+
+/*
+** Отображает содержание icmp пакета, если поднят флаг -v
+*/ 
+void	print_icmp_packege(unsigned char *buffer, int len)
+{
+	struct icmp		icmp_heder;
+	struct timeval	time_usec;
+
+	ft_memcpy(&icmp_heder, buffer + sizeof(struct ip), sizeof(struct icmp));
+	ft_memcpy(&time_usec, buffer + sizeof(struct ip) + sizeof(struct icmp),
+			sizeof(struct timeval));
+	if (!g_ping.fl_v)
+		return;
+	ft_printf("\x1b[33m");
+	ft_printf("+---------------------------------------+\n");
+	ft_printf("|               ICMP HAEDER             |\n");
+	ft_printf("+---------+---------+-------------------+\n");
+	ft_printf("| Type %.2x | Code %.2x |   Checksum %.4x   |\n",
+			icmp_heder.icmp_type,
+			icmp_heder.icmp_code,
+			icmp_heder.icmp_cksum);
+	ft_printf("+---------+---------+-------------------+\n");
+	ft_printf("|      PID %.4x     |      SEQ %.4x     |\n",
+			icmp_heder.icmp_hun.ih_idseq.icd_id,
+			icmp_heder.icmp_hun.ih_idseq.icd_seq);
+	ft_printf("+-------------------+-------------------+\n");
+	ft_printf("|            Data  %.10ld           |\n",
+			time_usec.tv_sec);
+	ft_printf("+---------------------------------------+\n");
+	ft_printf("\x1b[0m");
+}
+
 /*
 ** Ожидание и получение входного сообщения.
 */
+
 void	recvest_message(void)
 {
 	unsigned char	buffer[512];
@@ -232,6 +383,8 @@ void	recvest_message(void)
 		g_ping.count_recv_bits = recvmsg(g_ping.fd_socket, &msg, 0);
 		if (g_ping.count_recv_bits < 0)
 		  perror("recvmsg() failed");
+		print_ip_packege(buffer, g_ping.count_recv_bits);
+		print_icmp_packege(buffer, g_ping.count_recv_bits);
 		ft_printf("recv_len = {%d}\n", g_ping.count_recv_bits);
 		print_bits(buffer + 20, g_ping.count_recv_bits - 20);
 		if (check_recvmsg(buffer, g_ping.count_recv_bits) == -1)
@@ -298,6 +451,7 @@ void	print_rtt(void)
 	//sleep(1);
 }
 
+
 void	sendto_icmp(void)
 {
 	static int		sequence = 0;
@@ -340,7 +494,7 @@ void	preparation_to_send(void)
 	struct addrinfo	hints;
 
 	infill_struct_hints(&hints);
-	if ((temp = getaddrinfo("google.com", NULL, &hints, &g_ping.result)))
+	if ((temp = getaddrinfo(g_ping.destination, NULL, &hints, &g_ping.result)))
 	{
 		ft_printf("gai_strerror = %s\n", gai_strerror(temp));
 		sys_err("Error. getaddrinfo\n");
