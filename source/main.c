@@ -4,15 +4,17 @@ void	work();
 
 void	print_usege(void)
 {
-	fprintf(stderr, "usage: ping [-ahv] [-c count] [-i wait] [-t ttl] destination\n");
+	fprintf(stderr, "usage: ping [-adfhv] [-c count] [-i wait] [-t ttl]\n");
+	fprintf(stderr, "            [-w waittime] destination\n");
 	fprintf(stderr, "\t-a audible.\n");
 	fprintf(stderr, "\t-c the number of packets to send.\n");
 	fprintf(stderr, "\t-d use the SOCK_DGRAM socket type.\n");
 	fprintf(stderr, "\t-f flood mode. Administration rights are required (sodo).\n");
 	fprintf(stderr, "\t-h help.\n");
-	fprintf(stderr, "\t-i wait wait seconds between sending each packet..\n");
-	fprintf(stderr, "\t-v verbose mode. Display additional information about ICMP.\n");
+	fprintf(stderr, "\t-i wait wait seconds between sending each packet.\n");
 	fprintf(stderr, "\t-t ttl. Set the IP Time To Live for outgoing packets.\n");
+	fprintf(stderr, "\t-v verbose mode. Display additional information about ICMP.\n");
+	fprintf(stderr, "\t-w Time in milliseconds to wait for a reply for each packet sent..\n");
 	exit(-1);
 }
 
@@ -77,6 +79,8 @@ void	check_char_flags(char c, int *i, char **av)
 		g_ping.fl_t = check_number_param(c, i, av);	
 	else if (c == 'v')
 		g_ping.fl_v = 1;	
+	else if (c == 'w')
+		g_ping.fl_w = check_number_param(c, i, av);	
 	else
 	{
 		fprintf(stderr, "ping: -%c flag: Operation not permitted.\n", c);
@@ -163,20 +167,50 @@ unsigned short checksum(void *pBuf, int nLen)
 }
 
 /*
+** Устанавливается таймер на получение ответного сообщения (SO_RCVTIMEO)
+** После истечения таймера recvmsg возвращает ошибку.
+** По умолчанию время ожидания 1 сек. В режиме flood mode 1 милисек.
+** Утановка TTL. По умолчанию 64.
+*/
+
+void	set_flag_to_socket(const int fd_socket)
+{
+	struct timeval	timer;
+
+	ft_memset(&timer, 0, sizeof(struct timeval));
+	if (g_ping.fl_f)
+		timer.tv_usec = 1;
+	else
+		timer.tv_sec = 1;
+	if (setsockopt(
+				fd_socket,
+				SOL_SOCKET,
+				SO_RCVTIMEO,
+				&timer,
+				sizeof(timer)) == -1)
+		sys_err("ping: error  setsockopt\n");
+	if (setsockopt(
+				fd_socket,
+				IPPROTO_IP,
+				IP_TTL,
+				&g_ping.fl_t,
+				sizeof(g_ping.fl_t)) == -1)
+		sys_err("ping: error  setsockopt\n");
+}
+
+/*
 ** Открываем сокет:
 ** Сетейство	AF_INET			Домен Интернета IPv4
 ** Тип			SOCK_DGRAM		Не ориентирован на создание лог. соединения
 ** Тип			SOCK_RAW		Сырой сокет. Требует права администратора.
 ** Протокол		IPPROTO_ICMP	Протокол управляющих сообщений Интернета
 ** Тип SOCK_DGRAM необходимо использовать для открытия сокета не для root.
-** Устанавливается таймер на получение ответного сообщения (SO_RCVTIMEO)
 */
 
-int	open_icmp_socket(struct addrinfo *hints)
+int		open_icmp_socket(struct addrinfo *hints)
 {
-	int				fd_socket;
-	int				socket_type;
-	struct timeval	timer = {1,0};
+	int	fd_socket;
+	int	socket_type;
 
 	if (g_ping.fl_d)
 		socket_type = SOCK_DGRAM;
@@ -187,21 +221,7 @@ int	open_icmp_socket(struct addrinfo *hints)
 					socket_type,
 					IPPROTO_ICMP)) == -1)
 		sys_err("ping: error open socket. Use sudo or -d frag.\n");
-	printf("Socket opened.\nfd_socket = %d\n\n", fd_socket);
-	if (setsockopt(
-				fd_socket,
-				SOL_SOCKET,
-				SO_RCVTIMEO,
-				&timer,
-				sizeof(timer)) == -1)
-		sys_err("Error: setsockopt\n");
-	if (setsockopt(
-				fd_socket,
-				IPPROTO_IP,
-				IP_TTL,
-				&g_ping.fl_t,
-				sizeof(g_ping.fl_t)) == -1)
-		sys_err("Error: setsockopt\n");
+	set_flag_to_socket(fd_socket);
 	return (fd_socket);
 }	
 
@@ -433,7 +453,7 @@ int	recvest_message(void)
 			return (-1);
 		}
 		printf("recv_len = {%d}\n", g_ping.count_recv_bits);
-		print_bits(buffer + 20, g_ping.count_recv_bits - 20);
+		//print_bits(buffer + 20, g_ping.count_recv_bits - 20);
 		if (check_recvmsg(buffer, g_ping.count_recv_bits) == -1)
 			print_packet(buffer, g_ping.count_recv_bits, ANSI_RED);
 		else
@@ -442,10 +462,9 @@ int	recvest_message(void)
 	}
 	g_ping.count_recv_packege++;
 	print_packet(buffer, g_ping.count_recv_bits, ANSI_YELLOW);
-	print_bits(&g_ping.ip_heder_recv, sizeof(struct ip));
-	print_bits(&g_ping.icmp_heder_recv, sizeof(struct icmp));
-	print_bits(&g_ping.time_recv, sizeof(struct timeval));
-	printf("End!!\n\n");
+	//print_bits(&g_ping.ip_heder_recv, sizeof(struct ip));
+	//print_bits(&g_ping.icmp_heder_recv, sizeof(struct icmp));
+	//print_bits(&g_ping.time_recv, sizeof(struct timeval));
 	return (1);
 }
 
@@ -460,23 +479,27 @@ char	*get_ip_str(void)
 	return (buf);
 }
 
-double	get_time_diff(void)
+int		get_time_diff(double *time_diff)
 {
 	struct timeval	time_now;
-	double			time_diff;
 
 	if (gettimeofday(&time_now, NULL) == -1)
 		sys_err("Error: gettimeofday.\n");
-	time_diff = (time_now.tv_usec - g_ping.time_recv.tv_usec) / 1000.0;
+	*time_diff = (time_now.tv_usec - g_ping.time_recv.tv_usec) / 1000.0;
 	if (time_diff < 0)
-		time_diff = g_ping.min_time_diff;
-	if (g_ping.max_time_diff < time_diff || g_ping.max_time_diff == 0)
-		g_ping.max_time_diff = time_diff;
-	if (g_ping.min_time_diff > time_diff || g_ping.min_time_diff == 0)
-		g_ping.min_time_diff = time_diff;
-	g_ping.sum_time_diff += time_diff;
-	g_ping.sum_sq_time_diff += (time_diff * time_diff);
-	return (time_diff);
+		*time_diff = g_ping.min_time_diff;
+	if (g_ping.max_time_diff < *time_diff || g_ping.max_time_diff == 0)
+		g_ping.max_time_diff = *time_diff;
+	if (g_ping.min_time_diff > *time_diff || g_ping.min_time_diff == 0)
+		g_ping.min_time_diff = *time_diff;
+	g_ping.sum_time_diff += *time_diff;
+	g_ping.sum_sq_time_diff += (*time_diff * *time_diff);
+	if (*time_diff > g_ping.fl_w && g_ping.fl_w != 0)
+	{
+		g_ping.count_timeout_packege++;
+		return (0);
+	}
+	return (1);
 }
 
 void	print_rtt(void)
@@ -485,14 +508,8 @@ void	print_rtt(void)
 	double	time_diff;
 	
 	ip_str = get_ip_str();
-	time_diff = get_time_diff();	
-	printf("ip_str = {%s}\n", ip_str);
-	printf("time_diff = {%.3f}\n", time_diff);
-	printf("max_time_diff = {%.3f}\n", (double)g_ping.max_time_diff);
-	printf("min_time_diff = {%.3f}\n", (double)g_ping.min_time_diff);
-	printf("avr_time_diff = {%.3f}\n", ((double)g_ping.sum_time_diff /
-			(double)g_ping.icmp_heder_recv.icmp_hun.ih_idseq.icd_seq));
-	printf(RTT_SRT, g_ping.count_recv_bits, ip_str,
+	if (get_time_diff(&time_diff))	
+		printf(RTT_SRT, g_ping.count_recv_bits, ip_str,
 			g_ping.icmp_heder_recv.icmp_hun.ih_idseq.icd_seq,
 			g_ping.ip_heder_recv.ip_ttl,
 			time_diff);
@@ -546,7 +563,7 @@ void	sendto_icmp(void)
 	printf("Send {%d} octets.\n", g_ping.count_send_bits);
 	printf("icmp + timeval {%ld} octets.\n",
 			sizeof(struct icmp) + sizeof(struct timeval));
-	print_bits(data, sizeof(struct icmp) + sizeof(struct timeval));
+	//print_bits(data, sizeof(struct icmp) + sizeof(struct timeval));
 	g_ping.count_send_packege++;
 	if (recvest_message() != -1)
 		print_rtt();
@@ -619,10 +636,14 @@ void	print_final_rtt(void)
 	stddev = get_stddev(avr);
 	percent_lost = get_percont_lost();
 	printf("--- %s ping statistics ---\n", g_ping.destination);
-	printf("%d packets transmitted, %d packets received, %.1f%% packet loss\n",
+	printf("%d packets transmitted, %d packets received, %.1f%% packet loss",
 			g_ping.count_send_packege,
 			g_ping.count_recv_packege,
 			percent_lost);
+	if (g_ping.count_timeout_packege != 0)
+		printf(", %lu packets out of wait time\n", g_ping.count_timeout_packege);
+	else
+		printf("\n");
 	printf("round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms\n",
 			g_ping.min_time_diff,
 			avr,
@@ -646,8 +667,8 @@ void	working_signals(int sig)
 		print_final_rtt();		
 	else if (sig == SIGALRM)
 	{
-		sendto_icmp();
 		alarm(g_ping.fl_i);
+		sendto_icmp();
 	}
 }
 
@@ -659,7 +680,8 @@ void	set_signals(void)
 
 /*
 ** Установка стандарных значений флагов.
-** fl_i = 1 количество секунд между отправками пакетов.
+** fl_i = 1		количество секунд между отправками пакетов.
+** fl_t = 64	время жизни пакета.
 */
 
 void	infill_default_flags(void)
@@ -685,7 +707,6 @@ int		main(int ac, char **av)
 	if (g_ping.fl_f)
 		flood_mode();
 	sendto_icmp();
-	//ft_printf("alarm %d\n", alarm(2));
 	alarm(g_ping.fl_i);
 	while(21)
 		i = 21;
