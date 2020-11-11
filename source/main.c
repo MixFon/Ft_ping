@@ -6,8 +6,9 @@ void	print_usege(void)
 {
 	fprintf(stderr, "usage: ping [-ahv] [-c count] [-i wait] [-t ttl] destination\n");
 	fprintf(stderr, "\t-a audible.\n");
-	fprintf(stderr, "\t-d use the SOCK_DGRAM socket type.\n");
 	fprintf(stderr, "\t-c the number of packets to send.\n");
+	fprintf(stderr, "\t-d use the SOCK_DGRAM socket type.\n");
+	fprintf(stderr, "\t-f flood mode. Administration rights are required (sodo).\n");
 	fprintf(stderr, "\t-h help.\n");
 	fprintf(stderr, "\t-i wait wait seconds between sending each packet..\n");
 	fprintf(stderr, "\t-v verbose mode. Display additional information about ICMP.\n");
@@ -68,6 +69,8 @@ void	check_char_flags(char c, int *i, char **av)
 		g_ping.fl_c = check_number_param(c, i, av);
 	else if (c == 'd')
 		g_ping.fl_d = 1;	
+	else if (c == 'f')
+		g_ping.fl_f = 1;	
 	else if (c == 'i')
 		g_ping.fl_i = check_number_param(c, i, av);	
 	else if (c == 't')
@@ -90,7 +93,7 @@ void	check_flags(int *i, char **av)
 		sys_err("ping: unrecognized option \'-\'\n");
 	while (*(++flags) != '\0')
 		check_char_flags(*flags, i, av);
-	//ft_printf("Flags\n");
+	//printf("Flags\n");
 	//exit(-1);
 }
 
@@ -103,13 +106,13 @@ void	infill_destination(char *destination)
 
 void	print_flags(void)
 {
-	ft_printf("-a ={%d}\n", g_ping.fl_a);
-	ft_printf("-d ={%d}\n", g_ping.fl_d);
-	ft_printf("-c ={%d}\n", g_ping.fl_c);
-	ft_printf("-i ={%d}\n", g_ping.fl_i);
-	ft_printf("-t ={%d}\n", g_ping.fl_t);
-	ft_printf("-v ={%d}\n", g_ping.fl_v);
-	ft_printf("destination = {%s}\n", g_ping.destination);
+	printf("-a ={%d}\n", g_ping.fl_a);
+	printf("-d ={%d}\n", g_ping.fl_d);
+	printf("-c ={%d}\n", g_ping.fl_c);
+	printf("-i ={%d}\n", g_ping.fl_i);
+	printf("-t ={%d}\n", g_ping.fl_t);
+	printf("-v ={%d}\n", g_ping.fl_v);
+	printf("destination = {%s}\n", g_ping.destination);
 }
 
 void	check_parametes(int ac, char **av)
@@ -121,10 +124,10 @@ void	check_parametes(int ac, char **av)
 		print_usege();
 	if (av[1][0] == '\0')
 		print_usege();
-	ft_printf("ac = {%d} *av {%s}\n", ac, *av);
+	printf("ac = {%d} *av {%s}\n", ac, *av);
 	while (++i < ac)
 	{
-		ft_printf("av[%d] = {%s}\n",i ,av[i]);
+		printf("av[%d] = {%s}\n",i ,av[i]);
 		if (av[i][0] == '-')
 			check_flags(&i, av);
 		else
@@ -133,7 +136,6 @@ void	check_parametes(int ac, char **av)
 	if (g_ping.destination == NULL)
 		print_usege();
 	print_flags();
-	//exit(-1);
 }
 
 /*
@@ -185,7 +187,7 @@ int	open_icmp_socket(struct addrinfo *hints)
 					socket_type,
 					IPPROTO_ICMP)) == -1)
 		sys_err("ping: error open socket. Use sudo or -d frag.\n");
-	ft_printf("Socket opened.\nfd_socket = %d\n\n", fd_socket);
+	printf("Socket opened.\nfd_socket = %d\n\n", fd_socket);
 	if (setsockopt(
 				fd_socket,
 				SOL_SOCKET,
@@ -232,23 +234,23 @@ void	print_list_adrinfo(struct addrinfo *hints)
 	i = -1;
 	while (iter != NULL)
 	{
-		ft_printf("i = %d\n", ++i);
-		ft_printf("ping->hints.ai_flags = %d\n", iter->ai_flags);
-		ft_printf("ping->hints.ai_family = %d\n", iter->ai_family);
-		ft_printf("ping->hints.ai_socktype = %d\n", iter->ai_socktype);
-		ft_printf("ping->hints.ai_protocol = %d\n", iter->ai_protocol);
-		ft_printf("ping->hints.ai_addrlen = %d\n", iter->ai_addrlen);
-		ft_printf("\tping->hints.ai_addr.sa_family = %d\n",
+		printf("i = %d\n", ++i);
+		printf("ping->hints.ai_flags = %d\n", iter->ai_flags);
+		printf("ping->hints.ai_family = %d\n", iter->ai_family);
+		printf("ping->hints.ai_socktype = %d\n", iter->ai_socktype);
+		printf("ping->hints.ai_protocol = %d\n", iter->ai_protocol);
+		printf("ping->hints.ai_addrlen = %d\n", iter->ai_addrlen);
+		printf("\tping->hints.ai_addr.sa_family = %d\n",
 				iter->ai_addr->sa_family);
-		ft_printf("\tping->hints.ai_addr.sa_data = %#x\n",
+		printf("\tping->hints.ai_addr.sa_data = %s\n",
 				iter->ai_addr->sa_data);
 		sinp = (struct sockaddr_in *)iter->ai_addr;
 		sinp6 = (struct sockaddr_in6 *)iter->ai_addr;
-		ft_printf("inet_ntop ipv4 = %s\n",
+		printf("inet_ntop ipv4 = %s\n",
 				inet_ntop(AF_INET, &sinp->sin_addr, buf, INET_ADDRSTRLEN));
-		ft_printf("inet_ntop ipv6 = %s\n",
+		printf("inet_ntop ipv6 = %s\n",
 				inet_ntop(AF_INET6, &sinp6->sin6_addr, buf, INET6_ADDRSTRLEN));
-		ft_printf("ping->hiets.ai_canonname = %s\n", iter->ai_canonname);
+		printf("ping->hiets.ai_canonname = %s\n", iter->ai_canonname);
 		//open_socket(iter);
 		iter = iter->ai_next;
 	}
@@ -279,7 +281,7 @@ void	print_bits(void *src, size_t len)
 
 	c = src;
 	for (int i = 0; i < len; i++)
-		ft_printf("%x ", *c++);
+		printf("%x ", *c++);
 	ft_putendl("");
 }
 
@@ -335,29 +337,29 @@ void	print_ip_packege(const unsigned char *buffer, const int len)
 	ft_memcpy(&ip_heder, buffer, sizeof(struct ip));
 	sinp = (struct sockaddr_in *)&ip_heder.ip_src;
 	inet_ntop(AF_INET, &sinp->sin_addr, buf, INET_ADDRSTRLEN);
-	ft_printf("+---------------------------------------+\n");
-	ft_printf("|                IP HAEDER              |\n");
-	ft_printf("+----+----+---------+-------------------+\n");
-	ft_printf("| %.2d | %.2d | Type %.2x |    Length %.4d    |\n",
+	printf("+---------------------------------------+\n");
+	printf("|                IP HAEDER              |\n");
+	printf("+----+----+---------+-------------------+\n");
+	printf("| %.2d | %.2d | Type %.2x |    Length %.4d    |\n",
 			ip_heder.ip_v,
 			ip_heder.ip_hl,
 			ip_heder.ip_tos,
 			ip_heder.ip_len);
-	ft_printf("+---------+---------+-------------------+\n");
-	ft_printf("|    IP ID %.4x     |    Offset %.4x    |\n",
+	printf("+---------+---------+-------------------+\n");
+	printf("|    IP ID %.4x     |    Offset %.4x    |\n",
 			ip_heder.ip_id,
 			ip_heder.ip_off);
-	ft_printf("+---------+---------+-------------------+\n");
-	ft_printf("| TTL %.3d | Prot %.2x |   Checksum %.4x   |\n",
+	printf("+---------+---------+-------------------+\n");
+	printf("| TTL %.3d | Prot %.2x |   Checksum %.4x   |\n",
 			ip_heder.ip_ttl,
 			ip_heder.ip_p,
 			ip_heder.ip_sum);
-	ft_printf("+---------+---------+-------------------+\n");
-	ft_printf("|     Source            %-14s  |\n", buf);
+	printf("+---------+---------+-------------------+\n");
+	printf("|     Source            %-14s  |\n", buf);
 	sinp = (struct sockaddr_in *)&ip_heder.ip_dst;
 	inet_ntop(AF_INET, &sinp->sin_addr, buf, INET_ADDRSTRLEN);
-	ft_printf("+---------------------------------------+\n");
-	ft_printf("|     Dertanation       %-14s  |\n", buf);
+	printf("+---------------------------------------+\n");
+	printf("|     Dertanation       %-14s  |\n", buf);
 	free(buf);
 }
 
@@ -375,30 +377,30 @@ void	print_icmp_packege(const unsigned char *buffer, const int len)
 	ft_memcpy(&icmp_heder, buffer + sizeof(struct ip), sizeof(struct icmp));
 	ft_memcpy(&time_usec, buffer + sizeof(struct ip) + sizeof(struct icmp),
 			sizeof(struct timeval));
-	ft_printf("+---------------------------------------+\n");
-	ft_printf("|               ICMP HAEDER             |\n");
-	ft_printf("+---------+---------+-------------------+\n");
-	ft_printf("| Type %.2d | Code %.2x |   Checksum %.4x   |\n",
+	printf("+---------------------------------------+\n");
+	printf("|               ICMP HAEDER             |\n");
+	printf("+---------+---------+-------------------+\n");
+	printf("| Type %.2d | Code %.2x |   Checksum %.4x   |\n",
 			icmp_heder.icmp_type,
 			icmp_heder.icmp_code,
 			icmp_heder.icmp_cksum);
-	ft_printf("+---------+---------+-------------------+\n");
-	ft_printf("|      PID %.4x     |      SEQ %.4u     |\n",
+	printf("+---------+---------+-------------------+\n");
+	printf("|      PID %.4x     |      SEQ %.4u     |\n",
 			icmp_heder.icmp_hun.ih_idseq.icd_id,
 			icmp_heder.icmp_hun.ih_idseq.icd_seq);
-	ft_printf("+-------------------+-------------------+\n");
-	ft_printf("|       Data   % .15ld         |\n",
+	printf("+-------------------+-------------------+\n");
+	printf("|       Data   % .15ld         |\n",
 			time_usec.tv_sec);
-	ft_printf("+---------------------------------------+\n");
+	printf("+---------------------------------------+\n");
 }
 
 void	print_packet(const unsigned char *buffer, const int len, const char *color)
 {
 
-	ft_printf(color);
+	printf("%s", color);
 	print_ip_packege(buffer, g_ping.count_recv_bits);
 	print_icmp_packege(buffer, g_ping.count_recv_bits);
-	ft_printf(ANSI_RESET);
+	printf(ANSI_RESET);
 }
 
 /*
@@ -420,7 +422,7 @@ int	recvest_message(void)
 	msg.msg_iovlen  = 1;
 	//msg.msg_control    = (char *)&pass_sd;
 	//msg.msg_controllen = sizeof(pass_sd);
-	ft_printf("Waiting on recvmsg\n");
+	printf("Waiting on recvmsg\n");
 	while (21)
 	{
 		g_ping.count_recv_bits = recvmsg(g_ping.fd_socket, &msg, 0);
@@ -430,7 +432,7 @@ int	recvest_message(void)
 					g_ping.count_send_packege - 1);
 			return (-1);
 		}
-		ft_printf("recv_len = {%d}\n", g_ping.count_recv_bits);
+		printf("recv_len = {%d}\n", g_ping.count_recv_bits);
 		print_bits(buffer + 20, g_ping.count_recv_bits - 20);
 		if (check_recvmsg(buffer, g_ping.count_recv_bits) == -1)
 			print_packet(buffer, g_ping.count_recv_bits, ANSI_RED);
@@ -443,7 +445,7 @@ int	recvest_message(void)
 	print_bits(&g_ping.ip_heder_recv, sizeof(struct ip));
 	print_bits(&g_ping.icmp_heder_recv, sizeof(struct icmp));
 	print_bits(&g_ping.time_recv, sizeof(struct timeval));
-	ft_printf("End!!\n\n");
+	printf("End!!\n\n");
 	return (1);
 }
 
@@ -484,13 +486,13 @@ void	print_rtt(void)
 	
 	ip_str = get_ip_str();
 	time_diff = get_time_diff();	
-	ft_printf("ip_str = {%s}\n", ip_str);
-	ft_printf("time_diff = {%.3f}\n", time_diff);
-	ft_printf("max_time_diff = {%.3f}\n", (double)g_ping.max_time_diff);
-	ft_printf("min_time_diff = {%.3f}\n", (double)g_ping.min_time_diff);
-	ft_printf("avr_time_diff = {%.3f}\n", ((double)g_ping.sum_time_diff /
+	printf("ip_str = {%s}\n", ip_str);
+	printf("time_diff = {%.3f}\n", time_diff);
+	printf("max_time_diff = {%.3f}\n", (double)g_ping.max_time_diff);
+	printf("min_time_diff = {%.3f}\n", (double)g_ping.min_time_diff);
+	printf("avr_time_diff = {%.3f}\n", ((double)g_ping.sum_time_diff /
 			(double)g_ping.icmp_heder_recv.icmp_hun.ih_idseq.icd_seq));
-	ft_printf(RTT_SRT, g_ping.count_recv_bits, ip_str,
+	printf(RTT_SRT, g_ping.count_recv_bits, ip_str,
 			g_ping.icmp_heder_recv.icmp_hun.ih_idseq.icd_seq,
 			g_ping.ip_heder_recv.ip_ttl,
 			time_diff);
@@ -513,7 +515,7 @@ void	realise_flags(const int sequence)
 	if (sequence >= g_ping.fl_c && g_ping.fl_c != 0)
 		print_final_rtt();
 	if (g_ping.fl_a)
-		ft_printf("%c", 0x07);
+		printf("%c", 0x07);
 }
 
 void	sendto_icmp(void)
@@ -541,8 +543,8 @@ void	sendto_icmp(void)
 			0, g_ping.result->ai_addr,
 			sizeof(g_ping.result->ai_addr))) == -1)
 		fprintf(stderr, "ping: sendto: Host is down.\n");
-	ft_printf("Send {%d} octets.\n", g_ping.count_send_bits);
-	ft_printf("icmp + timeval {%d} octets.\n",
+	printf("Send {%d} octets.\n", g_ping.count_send_bits);
+	printf("icmp + timeval {%ld} octets.\n",
 			sizeof(struct icmp) + sizeof(struct timeval));
 	print_bits(data, sizeof(struct icmp) + sizeof(struct timeval));
 	g_ping.count_send_packege++;
@@ -562,12 +564,13 @@ void	preparation_to_send(void)
 	size = sizeof(struct ip) + sizeof(struct icmp) + sizeof(struct timeval);
 	if ((temp = getaddrinfo(g_ping.destination, NULL, &hints, &g_ping.result)))
 	{
-		ft_printf("gai_strerror = %s\n", gai_strerror(temp));
-		sys_err("Error. getaddrinfo\n");
+		fprintf(stderr, "ping: cannot resolve %s: Unknown host\n",
+				g_ping.destination);
+		exit(-1);
 	}
 	g_ping.fd_socket = open_icmp_socket(g_ping.result);
 	ip_str = get_ip_str();
-	ft_printf(RTT_HEAD_SRT, g_ping.destination, ip_str, size);
+	printf(RTT_HEAD_SRT, g_ping.destination, ip_str, size);
 	free(ip_str);
 	//sendto_icmp();
 }
@@ -583,7 +586,7 @@ double	get_stddev(double avr)
 
 	res = ABS(((g_ping.sum_sq_time_diff - 2 * avr * g_ping.sum_time_diff) +
 		avr * avr * g_ping.count_recv_packege) / g_ping.count_recv_packege);
-	ft_printf("res = {%f}\n", res);
+	//printf("res = {%f}\n", res);
 	return (sqrt(res));
 }
 
@@ -602,7 +605,8 @@ double	get_percont_lost(void)
 }
 
 /*
-** После приема сигнала SIGINT (ctrl+C) завершаем программу и выводим статистику..
+** После приема сигнала SIGINT (ctrl+C) завершаем программу
+** и выводим статистику.
 */ 
 
 void	print_final_rtt(void)
@@ -614,16 +618,18 @@ void	print_final_rtt(void)
 	avr = get_average();
 	stddev = get_stddev(avr);
 	percent_lost = get_percont_lost();
-	ft_printf("--- %s ping statistics ---\n", g_ping.destination);
-	ft_printf("%d packets transmitted, %d packets received, %.1f%% packet loss\n",
+	printf("--- %s ping statistics ---\n", g_ping.destination);
+	printf("%d packets transmitted, %d packets received, %.1f%% packet loss\n",
 			g_ping.count_send_packege,
 			g_ping.count_recv_packege,
 			percent_lost);
-	ft_printf("round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms\n",
+	printf("round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms\n",
 			g_ping.min_time_diff,
 			avr,
 			g_ping.max_time_diff,
 			stddev);
+	freeaddrinfo(g_ping.result);
+	free(g_ping.destination);
 	exit(0);
 }
 
@@ -635,7 +641,7 @@ void	print_final_rtt(void)
 
 void	working_signals(int sig)
 {
-	ft_printf("sig = {%d}!!\n", sig);
+	printf("sig = {%d}!!\n", sig);
 	if (sig == SIGINT)
 		print_final_rtt();		
 	else if (sig == SIGALRM)
@@ -662,6 +668,12 @@ void	infill_default_flags(void)
 	g_ping.fl_t = 64;
 }
 
+void	flood_mode(void)
+{
+	while (21)
+		sendto_icmp();
+}
+
 int		main(int ac, char **av)
 {
 	int i;
@@ -670,6 +682,8 @@ int		main(int ac, char **av)
 	check_parametes(ac, av);
 	set_signals();
 	preparation_to_send();	
+	if (g_ping.fl_f)
+		flood_mode();
 	sendto_icmp();
 	//ft_printf("alarm %d\n", alarm(2));
 	alarm(g_ping.fl_i);
