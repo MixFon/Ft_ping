@@ -4,11 +4,14 @@ void	work();
 
 void	print_usege(void)
 {
-	fprintf(stderr, "usage: ping [-hv] [-c count] destination\n");
+	fprintf(stderr, "usage: ping [-ahv] [-c count] [-i wait] [-t ttl] destination\n");
+	fprintf(stderr, "\t-a audible.\n");
+	fprintf(stderr, "\t-d use the SOCK_DGRAM socket type.\n");
 	fprintf(stderr, "\t-c the number of packets to send.\n");
 	fprintf(stderr, "\t-h help.\n");
 	fprintf(stderr, "\t-i wait wait seconds between sending each packet..\n");
 	fprintf(stderr, "\t-v verbose mode. Display additional information about ICMP.\n");
+	fprintf(stderr, "\t-t ttl. Set the IP Time To Live for outgoing packets.\n");
 	exit(-1);
 }
 
@@ -37,6 +40,8 @@ void	is_all_number(char *number)
 
 int		check_number_param(char c, int *i, char **av)
 {
+	int temp;
+
 	if (av[*i + 1] == NULL)
 	{
 		fprintf(stderr, "ping: option requires an argument -- %c\n", c);
@@ -44,6 +49,12 @@ int		check_number_param(char c, int *i, char **av)
 	}
 	is_all_number(av[*i + 1]);
 	(*i)++;
+	temp = ft_atoi(av[*i]);	
+	if (temp <= 0)
+	{
+		fprintf(stderr, "ping: invalid count of packets to transmit: `%s'\n", av[*i]);
+		exit(-1);
+	}
 	return (ft_atoi(av[*i]));
 }
 
@@ -51,10 +62,16 @@ void	check_char_flags(char c, int *i, char **av)
 {
 	if (c == 'h')
 		print_usege();
-	if (c == 'c')
+	if (c == 'a')
+		g_ping.fl_a = 1;	
+	else if (c == 'c')
 		g_ping.fl_c = check_number_param(c, i, av);
+	else if (c == 'd')
+		g_ping.fl_d = 1;	
 	else if (c == 'i')
 		g_ping.fl_i = check_number_param(c, i, av);	
+	else if (c == 't')
+		g_ping.fl_t = check_number_param(c, i, av);	
 	else if (c == 'v')
 		g_ping.fl_v = 1;	
 	else
@@ -86,8 +103,12 @@ void	infill_destination(char *destination)
 
 void	print_flags(void)
 {
-	ft_printf("-v ={%d}\n", g_ping.fl_v);
+	ft_printf("-a ={%d}\n", g_ping.fl_a);
+	ft_printf("-d ={%d}\n", g_ping.fl_d);
 	ft_printf("-c ={%d}\n", g_ping.fl_c);
+	ft_printf("-i ={%d}\n", g_ping.fl_i);
+	ft_printf("-t ={%d}\n", g_ping.fl_t);
+	ft_printf("-v ={%d}\n", g_ping.fl_v);
 	ft_printf("destination = {%s}\n", g_ping.destination);
 }
 
@@ -143,6 +164,7 @@ unsigned short checksum(void *pBuf, int nLen)
 ** Открываем сокет:
 ** Сетейство	AF_INET			Домен Интернета IPv4
 ** Тип			SOCK_DGRAM		Не ориентирован на создание лог. соединения
+** Тип			SOCK_RAW		Сырой сокет. Требует права администратора.
 ** Протокол		IPPROTO_ICMP	Протокол управляющих сообщений Интернета
 ** Тип SOCK_DGRAM необходимо использовать для открытия сокета не для root.
 ** Устанавливается таймер на получение ответного сообщения (SO_RCVTIMEO)
@@ -150,17 +172,19 @@ unsigned short checksum(void *pBuf, int nLen)
 
 int	open_icmp_socket(struct addrinfo *hints)
 {
-	int	fd_socket;
-	int temp;
-	struct timeval timer = {1,0};
+	int				fd_socket;
+	int				socket_type;
+	struct timeval	timer = {1,0};
 
-	temp = 1;
+	if (g_ping.fl_d)
+		socket_type = SOCK_DGRAM;
+	else
+		socket_type = SOCK_RAW;
 	if ((fd_socket = socket(
 					AF_INET,
-					//SOCK_RAW,
-					SOCK_DGRAM,
+					socket_type,
 					IPPROTO_ICMP)) == -1)
-		sys_err("Error: open socket\n");
+		sys_err("ping: error open socket. Use sudo or -d frag.\n");
 	ft_printf("Socket opened.\nfd_socket = %d\n\n", fd_socket);
 	if (setsockopt(
 				fd_socket,
@@ -168,6 +192,13 @@ int	open_icmp_socket(struct addrinfo *hints)
 				SO_RCVTIMEO,
 				&timer,
 				sizeof(timer)) == -1)
+		sys_err("Error: setsockopt\n");
+	if (setsockopt(
+				fd_socket,
+				IPPROTO_IP,
+				IP_TTL,
+				&g_ping.fl_t,
+				sizeof(g_ping.fl_t)) == -1)
 		sys_err("Error: setsockopt\n");
 	return (fd_socket);
 }	
@@ -347,7 +378,7 @@ void	print_icmp_packege(const unsigned char *buffer, const int len)
 	ft_printf("+---------------------------------------+\n");
 	ft_printf("|               ICMP HAEDER             |\n");
 	ft_printf("+---------+---------+-------------------+\n");
-	ft_printf("| Type %.2x | Code %.2x |   Checksum %.4x   |\n",
+	ft_printf("| Type %.2d | Code %.2x |   Checksum %.4x   |\n",
 			icmp_heder.icmp_type,
 			icmp_heder.icmp_code,
 			icmp_heder.icmp_cksum);
@@ -356,7 +387,7 @@ void	print_icmp_packege(const unsigned char *buffer, const int len)
 			icmp_heder.icmp_hun.ih_idseq.icd_id,
 			icmp_heder.icmp_hun.ih_idseq.icd_seq);
 	ft_printf("+-------------------+-------------------+\n");
-	ft_printf("|            Data  %.10ld           |\n",
+	ft_printf("|       Data   % .15ld         |\n",
 			time_usec.tv_sec);
 	ft_printf("+---------------------------------------+\n");
 }
@@ -477,6 +508,13 @@ void	print_rtt(void)
 ** В конце испускаем сигнал SIGALRM (alarm()) через 1 сек. для пов-
 ** торного вызова функции.
 */
+void	realise_flags(const int sequence)
+{
+	if (sequence >= g_ping.fl_c && g_ping.fl_c != 0)
+		print_final_rtt();
+	if (g_ping.fl_a)
+		ft_printf("%c", 0x07);
+}
 
 void	sendto_icmp(void)
 {
@@ -510,8 +548,7 @@ void	sendto_icmp(void)
 	g_ping.count_send_packege++;
 	if (recvest_message() != -1)
 		print_rtt();
-	if (sequence >= g_ping.fl_c && g_ping.fl_c != 0)
-		print_final_rtt();
+	realise_flags(sequence);
 }
 
 void	preparation_to_send(void)
@@ -604,7 +641,7 @@ void	working_signals(int sig)
 	else if (sig == SIGALRM)
 	{
 		sendto_icmp();
-		alarm(1);
+		alarm(g_ping.fl_i);
 	}
 }
 
@@ -614,15 +651,28 @@ void	set_signals(void)
 	signal(SIGINT, working_signals);
 }
 
-int main(int ac, char **av)
+/*
+** Установка стандарных значений флагов.
+** fl_i = 1 количество секунд между отправками пакетов.
+*/
+
+void	infill_default_flags(void)
 {
+	g_ping.fl_i = 1;
+	g_ping.fl_t = 64;
+}
+
+int		main(int ac, char **av)
+{
+	int i;
+
+	infill_default_flags();
 	check_parametes(ac, av);
 	set_signals();
 	preparation_to_send();	
 	sendto_icmp();
 	//ft_printf("alarm %d\n", alarm(2));
-	int i;
-	alarm(1);
+	alarm(g_ping.fl_i);
 	while(21)
 		i = 21;
 	return (0);
