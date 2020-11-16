@@ -1,20 +1,27 @@
 #include "../include/ft_ping.h"
 
-void	work();
+//void	work();
 
 void	print_usege(void)
 {
-	fprintf(stderr, "usage: ping [-adfhv] [-c count] [-i wait] [-t ttl]\n");
-	fprintf(stderr, "            [-w waittime] destination\n");
+	fprintf(stderr,
+			"usage: ping [-adfhv] [-c count] [-i wait] [-s packetsize]\n");
+	fprintf(stderr, "            [-t ttl] [-w waittime]  destination\n");
 	fprintf(stderr, "\t-a audible.\n");
 	fprintf(stderr, "\t-c the number of packets to send.\n");
 	fprintf(stderr, "\t-d use the SOCK_DGRAM socket type.\n");
-	fprintf(stderr, "\t-f flood mode. Administration rights are required (sodo).\n");
+	fprintf(stderr,
+			"\t-f flood mode. Administration rights are required (sodo).\n");
 	fprintf(stderr, "\t-h help.\n");
 	fprintf(stderr, "\t-i wait wait seconds between sending each packet.\n");
-	fprintf(stderr, "\t-t ttl. Set the IP Time To Live for outgoing packets.\n");
-	fprintf(stderr, "\t-v verbose mode. Display additional information about ICMP.\n");
-	fprintf(stderr, "\t-w Time in milliseconds to wait for a reply for each packet sent..\n");
+	fprintf(stderr,
+			"\t-s specify the number of data bytes to be sent. 0 - 32.\n");
+	fprintf(stderr,
+			"\t-t ttl. Set the IP Time To Live for outgoing packets.\n");
+	fprintf(stderr,
+			"\t-v verbose mode. Display additional information about ICMP.\n");
+	fprintf(stderr,
+			"\t-w Time in ms to wait for a reply for each packet sent..\n");
 	exit(-1);
 }
 
@@ -27,7 +34,8 @@ void	is_all_number(char *number)
 	{
 		if (!ft_isdigit(*iter))
 		{
-			fprintf(stderr, "ping: invalid count of packets to transmit: `%s'\n",
+			fprintf(stderr,
+					"ping: invalid count of packets to transmit: `%s'\n",
 					number);
 			exit(-1);
 		}
@@ -52,10 +60,11 @@ int		check_number_param(char c, int *i, char **av)
 	}
 	is_all_number(av[*i + 1]);
 	(*i)++;
-	temp = ft_atoi(av[*i]);	
+	temp = ft_atoi(av[*i]);
 	if (temp <= 0)
 	{
-		fprintf(stderr, "ping: invalid count of packets to transmit: `%s'\n", av[*i]);
+		fprintf(stderr,
+				"ping: invalid count of packets to transmit: `%s'\n", av[*i]);
 		exit(-1);
 	}
 	return (ft_atoi(av[*i]));
@@ -75,6 +84,8 @@ void	check_char_flags(char c, int *i, char **av)
 		g_ping.fl_f = 1;	
 	else if (c == 'i')
 		g_ping.fl_i = check_number_param(c, i, av);	
+	else if (c == 's')
+		g_ping.fl_s = check_number_param(c, i, av);	
 	else if (c == 't')
 		g_ping.fl_t = check_number_param(c, i, av);	
 	else if (c == 'v')
@@ -97,8 +108,6 @@ void	check_flags(int *i, char **av)
 		sys_err("ping: unrecognized option \'-\'\n");
 	while (*(++flags) != '\0')
 		check_char_flags(*flags, i, av);
-	//printf("Flags\n");
-	//exit(-1);
 }
 
 void	infill_destination(char *destination)
@@ -114,6 +123,7 @@ void	print_flags(void)
 	printf("-d ={%d}\n", g_ping.fl_d);
 	printf("-c ={%d}\n", g_ping.fl_c);
 	printf("-i ={%d}\n", g_ping.fl_i);
+	printf("-s ={%d}\n", g_ping.fl_s);
 	printf("-t ={%d}\n", g_ping.fl_t);
 	printf("-v ={%d}\n", g_ping.fl_v);
 	printf("destination = {%s}\n", g_ping.destination);
@@ -139,6 +149,11 @@ void	check_parametes(int ac, char **av)
 	}
 	if (g_ping.destination == NULL)
 		print_usege();
+	if (g_ping.fl_s > 32)
+	{
+		fprintf(stderr, "ping: packet size too large: %d > 32\n", g_ping.fl_s);
+		exit(-1);
+	}
 	print_flags();
 }
 
@@ -291,8 +306,8 @@ void	infill_icmp_heder(struct icmp *icmp_heder)
 	icmp_heder->icmp_type = ICMP_ECHO;
 	icmp_heder->icmp_code = 0;
 	icmp_heder->icmp_cksum = 0;
-	icmp_heder->icmp_hun.ih_idseq.icd_id = getpid();
-	icmp_heder->icmp_hun.ih_idseq.icd_seq = 0;
+	icmp_heder->icmp_id = getpid();
+	icmp_heder->icmp_seq = 0;
 }
 
 void	print_bits(void *src, size_t len)
@@ -317,10 +332,12 @@ int		check_recvmsg(unsigned char *buf, int len)
 	struct icmp		recv_icmp;
 	unsigned short	temp;
 	
-	if (len !=  sizeof(struct ip) + sizeof(struct icmp) + sizeof(struct timeval))	
+	printf("Hello\n");
+	if (len !=  sizeof(struct ip) + SIZE_PACKEGE)
 		return (-1);
 	ft_memcpy(&recv_icmp, buf + sizeof(struct ip), sizeof(struct icmp));
 	g_ping.icmp_heder_recv = recv_icmp;
+	printf("Hello1\n");
 	if (recv_icmp.icmp_hun.ih_idseq.icd_id != getpid())
 		return (-1);
 	if (recv_icmp.icmp_type != 0)
@@ -328,8 +345,7 @@ int		check_recvmsg(unsigned char *buf, int len)
 	temp = recv_icmp.icmp_cksum;
 	recv_icmp.icmp_cksum = 0;
 	ft_memcpy(buf + sizeof(struct ip), &recv_icmp, sizeof(struct icmp)); 
-	if (temp != checksum(buf + sizeof(struct ip),
-				sizeof(struct icmp) + sizeof(struct timeval)))
+	if (temp != checksum(buf + sizeof(struct ip), SIZE_PACKEGE))
 		return (-1);
 	ft_memcpy(&g_ping.ip_heder_recv, buf, sizeof(struct ip));
 	ft_memcpy(&g_ping.time_recv, buf + sizeof(struct ip) + sizeof(struct icmp),
@@ -405,21 +421,20 @@ void	print_icmp_packege(const unsigned char *buffer, const int len)
 			icmp_heder.icmp_code,
 			icmp_heder.icmp_cksum);
 	printf("+---------+---------+-------------------+\n");
-	printf("|      PID %.4x     |      SEQ %.4u     |\n",
+	printf("|    PID %.6d     |      SEQ %.4u     |\n",
 			icmp_heder.icmp_hun.ih_idseq.icd_id,
 			icmp_heder.icmp_hun.ih_idseq.icd_seq);
 	printf("+-------------------+-------------------+\n");
-	printf("|       Data   % .15ld         |\n",
-			time_usec.tv_sec);
+	printf("|       Data   %.15d         |\n",
+			time_usec.tv_usec);
 	printf("+---------------------------------------+\n");
 }
 
 void	print_packet(const unsigned char *buffer, const int len, const char *color)
 {
-
 	printf("%s", color);
-	print_ip_packege(buffer, g_ping.count_recv_bits);
-	print_icmp_packege(buffer, g_ping.count_recv_bits);
+	print_ip_packege(buffer, len);
+	print_icmp_packege(buffer, len);
 	printf(ANSI_RESET);
 }
 
@@ -430,7 +445,7 @@ void	print_packet(const unsigned char *buffer, const int len, const char *color)
 
 int	recvest_message(void)
 {
-	unsigned char	buffer[512];
+	unsigned char	buffer[sizeof(struct ip) + SIZE_PACKEGE];
 	struct iovec	iov[1];
 	struct msghdr	msg;
 
@@ -453,6 +468,9 @@ int	recvest_message(void)
 			return (-1);
 		}
 		printf("recv_len = {%d}\n", g_ping.count_recv_bits);
+		printf("struct icmp = {%ld}\n", sizeof(struct icmp));
+		printf("struct timeval = {%ld}\n", sizeof(struct timeval));
+		//print_bits((buffer + sizeof(struct ip)), g_ping.count_recv_bits - 20);
 		//print_bits(buffer + 20, g_ping.count_recv_bits - 20);
 		if (check_recvmsg(buffer, g_ping.count_recv_bits) == -1)
 			print_packet(buffer, g_ping.count_recv_bits, ANSI_RED);
@@ -540,29 +558,27 @@ void	sendto_icmp(void)
 	static int		sequence = 0;
 	struct timeval	time_send;
 	//int				count;
-	unsigned char	data[sizeof(struct icmp) + sizeof(struct timeval)];
+	unsigned char	data[SIZE_PACKEGE];
 	struct icmp		icmp_heder;
 
 	ft_memset(&data, 0, sizeof(data));
 	infill_icmp_heder(&icmp_heder);
-	icmp_heder.icmp_hun.ih_idseq.icd_seq = sequence++;
+	icmp_heder.icmp_seq = sequence++;
 	ft_memcpy(data, &icmp_heder, sizeof(struct icmp));
 	if (gettimeofday(&time_send, NULL) == -1)
 		sys_err("Error: gettimeofday.\n");
 	ft_memcpy(data + sizeof(struct icmp), &time_send,
 			sizeof(struct timeval));
 	//ping->icmp_heder.icmp_cksum = 0;
-	icmp_heder.icmp_cksum = checksum(data,
-			sizeof(struct icmp) + sizeof(struct timeval));
+	icmp_heder.icmp_cksum = checksum(data, sizeof(data));
 	ft_memcpy(data, &icmp_heder, sizeof(struct icmp));
 	if ((g_ping.count_send_bits = sendto(g_ping.fd_socket, data,
-			sizeof(struct icmp) + sizeof(struct timeval),
+			sizeof(data),
 			0, g_ping.result->ai_addr,
 			sizeof(g_ping.result->ai_addr))) == -1)
 		fprintf(stderr, "ping: sendto: Host is down.\n");
 	printf("Send {%d} octets.\n", g_ping.count_send_bits);
-	printf("icmp + timeval {%ld} octets.\n",
-			sizeof(struct icmp) + sizeof(struct timeval));
+	printf("icmp + timeval + fl_s {%ld} octets.\n", sizeof(data));
 	//print_bits(data, sizeof(struct icmp) + sizeof(struct timeval));
 	g_ping.count_send_packege++;
 	if (recvest_message() != -1)
@@ -578,7 +594,7 @@ void	preparation_to_send(void)
 	size_t			size;
 
 	infill_struct_hints(&hints);
-	size = sizeof(struct ip) + sizeof(struct icmp) + sizeof(struct timeval);
+	size = sizeof(struct icmp) + sizeof(struct timeval) + g_ping.fl_s;
 	if ((temp = getaddrinfo(g_ping.destination, NULL, &hints, &g_ping.result)))
 	{
 		fprintf(stderr, "ping: cannot resolve %s: Unknown host\n",
@@ -682,12 +698,14 @@ void	set_signals(void)
 ** Установка стандарных значений флагов.
 ** fl_i = 1		количество секунд между отправками пакетов.
 ** fl_t = 64	время жизни пакета.
+** fl_s = 20	размер пакета.
 */
 
 void	infill_default_flags(void)
 {
 	g_ping.fl_i = 1;
 	g_ping.fl_t = 64;
+	g_ping.fl_s = 20;
 }
 
 void	flood_mode(void)
