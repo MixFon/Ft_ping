@@ -21,7 +21,7 @@ void	print_usege(void)
 	fprintf(stderr,
 			"\t-v verbose mode. Display additional information about ICMP.\n");
 	fprintf(stderr,
-			"\t-w Time in ms to wait for a reply for each packet sent..\n");
+			"\t-w Time in ms to wait for a reply for each packet sent.\n");
 	exit(-1);
 }
 
@@ -117,18 +117,6 @@ void	infill_destination(char *destination)
 	g_ping.destination = ft_strdup(destination);
 }
 
-void	print_flags(void)
-{
-	printf("-a ={%d}\n", g_ping.fl_a);
-	printf("-d ={%d}\n", g_ping.fl_d);
-	printf("-c ={%d}\n", g_ping.fl_c);
-	printf("-i ={%d}\n", g_ping.fl_i);
-	printf("-s ={%d}\n", g_ping.fl_s);
-	printf("-t ={%d}\n", g_ping.fl_t);
-	printf("-v ={%d}\n", g_ping.fl_v);
-	printf("destination = {%s}\n", g_ping.destination);
-}
-
 void	check_parametes(int ac, char **av)
 {
 	int i;
@@ -138,10 +126,8 @@ void	check_parametes(int ac, char **av)
 		print_usege();
 	if (av[1][0] == '\0')
 		print_usege();
-	printf("ac = {%d} *av {%s}\n", ac, *av);
 	while (++i < ac)
 	{
-		printf("av[%d] = {%s}\n",i ,av[i]);
 		if (av[i][0] == '-')
 			check_flags(&i, av);
 		else
@@ -154,7 +140,6 @@ void	check_parametes(int ac, char **av)
 		fprintf(stderr, "ping: packet size too large: %d > 32\n", g_ping.fl_s);
 		exit(-1);
 	}
-	print_flags();
 }
 
 /*
@@ -241,54 +226,17 @@ int		open_icmp_socket(struct addrinfo *hints)
 }	
 
 /*
-** Заполнение структуры hints для последуюшей отправки в getaddrinfo
+** Заполнение структуры hints для последуюшей отправки в getaddrinfo.
+** Устанавливается семейство адресов AI_INER (IPv4).
+** Устанавливается протокол IPPROTO_ICMP.
+** Остальные значения устанавливаются в ноль.
 */
 
 void	infill_struct_hints(struct addrinfo *hints)
 {
 	ft_memset(hints, 0, sizeof(struct addrinfo));
 	hints->ai_family = AF_INET;
-	//hints->ai_family = AF_UNSPEC;
-	//hints->ai_flags = AI_V4MAPPED | AI_ALL;
-	//hints->ai_socktype = SOCK_RAW;
 	hints->ai_protocol = IPPROTO_ICMP;
-}
-
-/*
-** Каноническое имя хоста google.com
-*/
-void	print_list_adrinfo(struct addrinfo *hints)
-{
-	struct				addrinfo *iter;	
-	char				buf[100];
-	struct sockaddr_in	*sinp;
-	struct sockaddr_in6 *sinp6;
-	int					i;
-
-	iter = hints;
-	i = -1;
-	while (iter != NULL)
-	{
-		printf("i = %d\n", ++i);
-		printf("ping->hints.ai_flags = %d\n", iter->ai_flags);
-		printf("ping->hints.ai_family = %d\n", iter->ai_family);
-		printf("ping->hints.ai_socktype = %d\n", iter->ai_socktype);
-		printf("ping->hints.ai_protocol = %d\n", iter->ai_protocol);
-		printf("ping->hints.ai_addrlen = %d\n", iter->ai_addrlen);
-		printf("\tping->hints.ai_addr.sa_family = %d\n",
-				iter->ai_addr->sa_family);
-		printf("\tping->hints.ai_addr.sa_data = %s\n",
-				iter->ai_addr->sa_data);
-		sinp = (struct sockaddr_in *)iter->ai_addr;
-		sinp6 = (struct sockaddr_in6 *)iter->ai_addr;
-		printf("inet_ntop ipv4 = %s\n",
-				inet_ntop(AF_INET, &sinp->sin_addr, buf, INET_ADDRSTRLEN));
-		printf("inet_ntop ipv6 = %s\n",
-				inet_ntop(AF_INET6, &sinp6->sin6_addr, buf, INET6_ADDRSTRLEN));
-		printf("ping->hiets.ai_canonname = %s\n", iter->ai_canonname);
-		//open_socket(iter);
-		iter = iter->ai_next;
-	}
 }
 
 /*
@@ -310,16 +258,6 @@ void	infill_icmp_heder(struct icmp *icmp_heder)
 	icmp_heder->icmp_seq = 0;
 }
 
-void	print_bits(void *src, size_t len)
-{
-	char *c;
-
-	c = src;
-	for (int i = 0; i < len; i++)
-		printf("%x ", *c++);
-	ft_putendl("");
-}
-
 /*
 ** Проверка checksum входного icmp сообщения.
 ** Сохранение ip хедера.
@@ -332,12 +270,10 @@ int		check_recvmsg(unsigned char *buf, int len)
 	struct icmp		recv_icmp;
 	unsigned short	temp;
 	
-	printf("Hello\n");
 	if (len !=  sizeof(struct ip) + SIZE_PACKEGE)
 		return (-1);
 	ft_memcpy(&recv_icmp, buf + sizeof(struct ip), sizeof(struct icmp));
 	g_ping.icmp_heder_recv = recv_icmp;
-	printf("Hello1\n");
 	if (recv_icmp.icmp_hun.ih_idseq.icd_id != getpid())
 		return (-1);
 	if (recv_icmp.icmp_type != 0)
@@ -351,6 +287,26 @@ int		check_recvmsg(unsigned char *buf, int len)
 	ft_memcpy(&g_ping.time_recv, buf + sizeof(struct ip) + sizeof(struct icmp),
 			sizeof(struct timeval));
 	return (1);
+}
+
+void	print_tail(struct ip *ip_heder)
+{
+	char				*buf;
+	struct sockaddr_in	*sinp;
+
+	buf = ft_strnew(INET_ADDRSTRLEN);
+	printf("+---------+---------+-------------------+\n");
+	printf("| TTL %.3d | Prot %.2x |   Checksum %.4x   |\n",
+			ip_heder->ip_ttl,
+			ip_heder->ip_p,
+			ip_heder->ip_sum);
+	printf("+----------+---------+-------------------+\n");
+	printf("|     Source            %-14s  |\n", buf);
+	sinp = (struct sockaddr_in *)&ip_heder->ip_dst;
+	inet_ntop(AF_INET, &sinp->sin_addr, buf, INET_ADDRSTRLEN);
+	printf("+---------------------------------------+\n");
+	printf("|     Dertanation       %-14s  |\n", buf);
+	free(buf);
 }
 
 /*
@@ -385,18 +341,8 @@ void	print_ip_packege(const unsigned char *buffer, const int len)
 	printf("|    IP ID %.4x     |    Offset %.4x    |\n",
 			ip_heder.ip_id,
 			ip_heder.ip_off);
-	printf("+---------+---------+-------------------+\n");
-	printf("| TTL %.3d | Prot %.2x |   Checksum %.4x   |\n",
-			ip_heder.ip_ttl,
-			ip_heder.ip_p,
-			ip_heder.ip_sum);
-	printf("+---------+---------+-------------------+\n");
-	printf("|     Source            %-14s  |\n", buf);
-	sinp = (struct sockaddr_in *)&ip_heder.ip_dst;
-	inet_ntop(AF_INET, &sinp->sin_addr, buf, INET_ADDRSTRLEN);
-	printf("+---------------------------------------+\n");
-	printf("|     Dertanation       %-14s  |\n", buf);
 	free(buf);
+	print_tail(&ip_heder);
 }
 
 /*
@@ -421,21 +367,45 @@ void	print_icmp_packege(const unsigned char *buffer, const int len)
 			icmp_heder.icmp_code,
 			icmp_heder.icmp_cksum);
 	printf("+---------+---------+-------------------+\n");
-	printf("|    PID %.6d     |      SEQ %.4u     |\n",
+	printf("|    PID %6d     |      SEQ %.4u     |\n",
 			icmp_heder.icmp_hun.ih_idseq.icd_id,
 			icmp_heder.icmp_hun.ih_idseq.icd_seq);
 	printf("+-------------------+-------------------+\n");
-	printf("|       Data   %.15d         |\n",
-			time_usec.tv_usec);
+	printf("|        Data   %20ld    |\n", time_usec.tv_sec);
 	printf("+---------------------------------------+\n");
 }
 
-void	print_packet(const unsigned char *buffer, const int len, const char *color)
+void	print_bits(void *src, const size_t len)
+{
+	unsigned char	*c;
+	int				i;
+
+	i = -1;
+	c = src;
+	while(++i < len)
+		printf("%x ", *c++);
+	printf("\n");
+}
+
+void	print_packet(const unsigned char *buffer,
+		const int len, const char *color)
 {
 	printf("%s", color);
-	print_ip_packege(buffer, len);
-	print_icmp_packege(buffer, len);
+	if (len != (sizeof(struct ip) + SIZE_PACKEGE))
+		print_bits((void *)buffer, len);
+	else
+	{
+		print_ip_packege(buffer, len);
+		print_icmp_packege(buffer, len);
+	}
 	printf(ANSI_RESET);
+}
+
+void	infill_msg_iov(struct msghdr *msg, struct iovec *iov)
+{
+	ft_memset(msg, 0, sizeof(*msg));
+	(*msg).msg_iov     = iov;
+	(*msg).msg_iovlen  = 1;
 }
 
 /*
@@ -449,40 +419,26 @@ int	recvest_message(void)
 	struct iovec	iov[1];
 	struct msghdr	msg;
 
-	ft_memset(&msg, 0, sizeof(msg));
 	ft_memset(iov, 0, sizeof(iov));
 	iov[0].iov_base = &buffer;
 	iov[0].iov_len  = sizeof(buffer);
-	msg.msg_iov     = iov;
-	msg.msg_iovlen  = 1;
-	//msg.msg_control    = (char *)&pass_sd;
-	//msg.msg_controllen = sizeof(pass_sd);
-	printf("Waiting on recvmsg\n");
+	infill_msg_iov(&msg, iov);
 	while (21)
 	{
-		g_ping.count_recv_bits = recvmsg(g_ping.fd_socket, &msg, 0);
-		if (g_ping.count_recv_bits < 0)
+		if ((g_ping.count_recv_bits = recvmsg(g_ping.fd_socket, &msg, 0)) < 0)
 		{
 			fprintf(stderr, "Request timeout for icmp_seq %d\n",
 					g_ping.count_send_packege - 1);
 			return (-1);
 		}
-		printf("recv_len = {%d}\n", g_ping.count_recv_bits);
-		printf("struct icmp = {%ld}\n", sizeof(struct icmp));
-		printf("struct timeval = {%ld}\n", sizeof(struct timeval));
-		//print_bits((buffer + sizeof(struct ip)), g_ping.count_recv_bits - 20);
-		//print_bits(buffer + 20, g_ping.count_recv_bits - 20);
 		if (check_recvmsg(buffer, g_ping.count_recv_bits) == -1)
 			print_packet(buffer, g_ping.count_recv_bits, ANSI_RED);
 		else
 			break;
-			//sys_err("error: recvest message. will delete.\n");
 	}
 	g_ping.count_recv_packege++;
 	print_packet(buffer, g_ping.count_recv_bits, ANSI_YELLOW);
-	//print_bits(&g_ping.ip_heder_recv, sizeof(struct ip));
-	//print_bits(&g_ping.icmp_heder_recv, sizeof(struct icmp));
-	//print_bits(&g_ping.time_recv, sizeof(struct timeval));
+	g_ping.count_recv_bits = g_ping.count_recv_bits - sizeof(struct ip);
 	return (1);
 }
 
@@ -504,7 +460,7 @@ int		get_time_diff(double *time_diff)
 	if (gettimeofday(&time_now, NULL) == -1)
 		sys_err("Error: gettimeofday.\n");
 	*time_diff = (time_now.tv_usec - g_ping.time_recv.tv_usec) / 1000.0;
-	if (time_diff < 0)
+	if (*time_diff < 0)
 		*time_diff = g_ping.min_time_diff;
 	if (g_ping.max_time_diff < *time_diff || g_ping.max_time_diff == 0)
 		g_ping.max_time_diff = *time_diff;
@@ -545,19 +501,19 @@ void	print_rtt(void)
 ** В конце испускаем сигнал SIGALRM (alarm()) через 1 сек. для пов-
 ** торного вызова функции.
 */
+
 void	realise_flags(const int sequence)
 {
-	if (sequence >= g_ping.fl_c && g_ping.fl_c != 0)
-		print_final_rtt();
 	if (g_ping.fl_a)
 		printf("%c", 0x07);
+	if (sequence >= g_ping.fl_c && g_ping.fl_c != 0)
+		print_final_rtt();
 }
 
 void	sendto_icmp(void)
 {
 	static int		sequence = 0;
 	struct timeval	time_send;
-	//int				count;
 	unsigned char	data[SIZE_PACKEGE];
 	struct icmp		icmp_heder;
 
@@ -569,7 +525,6 @@ void	sendto_icmp(void)
 		sys_err("Error: gettimeofday.\n");
 	ft_memcpy(data + sizeof(struct icmp), &time_send,
 			sizeof(struct timeval));
-	//ping->icmp_heder.icmp_cksum = 0;
 	icmp_heder.icmp_cksum = checksum(data, sizeof(data));
 	ft_memcpy(data, &icmp_heder, sizeof(struct icmp));
 	if ((g_ping.count_send_bits = sendto(g_ping.fd_socket, data,
@@ -577,9 +532,6 @@ void	sendto_icmp(void)
 			0, g_ping.result->ai_addr,
 			sizeof(g_ping.result->ai_addr))) == -1)
 		fprintf(stderr, "ping: sendto: Host is down.\n");
-	printf("Send {%d} octets.\n", g_ping.count_send_bits);
-	printf("icmp + timeval + fl_s {%ld} octets.\n", sizeof(data));
-	//print_bits(data, sizeof(struct icmp) + sizeof(struct timeval));
 	g_ping.count_send_packege++;
 	if (recvest_message() != -1)
 		print_rtt();
@@ -591,10 +543,8 @@ void	preparation_to_send(void)
 	int				temp;
 	char			*ip_str;
 	struct addrinfo	hints;
-	size_t			size;
 
 	infill_struct_hints(&hints);
-	size = sizeof(struct icmp) + sizeof(struct timeval) + g_ping.fl_s;
 	if ((temp = getaddrinfo(g_ping.destination, NULL, &hints, &g_ping.result)))
 	{
 		fprintf(stderr, "ping: cannot resolve %s: Unknown host\n",
@@ -603,9 +553,8 @@ void	preparation_to_send(void)
 	}
 	g_ping.fd_socket = open_icmp_socket(g_ping.result);
 	ip_str = get_ip_str();
-	printf(RTT_HEAD_SRT, g_ping.destination, ip_str, size);
+	printf(RTT_HEAD_SRT, g_ping.destination, ip_str, SIZE_PACKEGE);
 	free(ip_str);
-	//sendto_icmp();
 }
 
 double	get_average(void)
@@ -678,7 +627,6 @@ void	print_final_rtt(void)
 
 void	working_signals(int sig)
 {
-	printf("sig = {%d}!!\n", sig);
 	if (sig == SIGINT)
 		print_final_rtt();		
 	else if (sig == SIGALRM)

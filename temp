@@ -1,0 +1,33 @@
+void	print_list_adrinfo(struct addrinfo *hints)
+{
+	struct				addrinfo *iter;	
+	char				buf[100];
+	struct sockaddr_in	*sinp;
+	struct sockaddr_in6 *sinp6;
+	int					i;
+
+	iter = hints;
+	i = -1;
+	while (iter != NULL)
+	{
+		printf("i = %d\n", ++i);
+		printf("ping->hints.ai_flags = %d\n", iter->ai_flags);
+		printf("ping->hints.ai_family = %d\n", iter->ai_family);
+		printf("ping->hints.ai_socktype = %d\n", iter->ai_socktype);
+		printf("ping->hints.ai_protocol = %d\n", iter->ai_protocol);
+		printf("ping->hints.ai_addrlen = %d\n", iter->ai_addrlen);
+		printf("\tping->hints.ai_addr.sa_family = %d\n",
+				iter->ai_addr->sa_family);
+		printf("\tping->hints.ai_addr.sa_data = %s\n",
+				iter->ai_addr->sa_data);
+		sinp = (struct sockaddr_in *)iter->ai_addr;
+		sinp6 = (struct sockaddr_in6 *)iter->ai_addr;
+		printf("inet_ntop ipv4 = %s\n",
+				inet_ntop(AF_INET, &sinp->sin_addr, buf, INET_ADDRSTRLEN));
+		printf("inet_ntop ipv6 = %s\n",
+				inet_ntop(AF_INET6, &sinp6->sin6_addr, buf, INET6_ADDRSTRLEN));
+		printf("ping->hiets.ai_canonname = %s\n", iter->ai_canonname);
+		//open_socket(iter);
+		iter = iter->ai_next;
+	}
+}
