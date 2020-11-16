@@ -1,7 +1,5 @@
 #include "../include/ft_ping.h"
 
-//void	work();
-
 void	print_usege(void)
 {
 	fprintf(stderr,
@@ -488,7 +486,6 @@ void	print_rtt(void)
 			g_ping.ip_heder_recv.ip_ttl,
 			time_diff);
 	free(ip_str);
-	//sleep(1);
 }
 
 /*
@@ -568,7 +565,6 @@ double	get_stddev(double avr)
 
 	res = ABS(((g_ping.sum_sq_time_diff - 2 * avr * g_ping.sum_time_diff) +
 		avr * avr * g_ping.count_recv_packege) / g_ping.count_recv_packege);
-	//printf("res = {%f}\n", res);
 	return (sqrt(res));
 }
 
