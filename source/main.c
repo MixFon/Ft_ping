@@ -6,7 +6,7 @@
 /*   By: widraugr <marvin@42.fr>                    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/11/17 08:19:33 by widraugr          #+#    #+#             */
-/*   Updated: 2020/11/17 08:19:36 by widraugr         ###   ########.fr       */
+/*   Updated: 2020/11/17 09:12:53 by mixfon           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -68,6 +68,6 @@ int		main(int ac, char **av)
 	sendto_icmp();
 	alarm(g_ping.fl_i);
 	while (21)
-		i = 21;
+		i++;
 	return (0);
 }
