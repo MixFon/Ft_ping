@@ -6,7 +6,7 @@
 /*   By: mixfon <marvin@42.fr>                      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/10/22 10:41:19 by mixfon            #+#    #+#             */
-/*   Updated: 2020/11/17 09:06:01 by widraugr         ###   ########.fr       */
+/*   Updated: 2020/11/17 09:15:22 by mixfon           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -99,7 +99,7 @@ int					open_icmp_socket(void);
 */
 void				infill_struct_hints(struct addrinfo *hints);
 void				infill_icmp_heder(struct icmp *icmp_heder);
-int					check_recvmsg(unsigned char *buf, int len);
+int					check_recvmsg(unsigned char *buf, size_t len);
 void				print_tail(struct ip *ip_heder);
 void				print_ip_packege(const unsigned char *buffer);
 /*

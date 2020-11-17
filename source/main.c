@@ -6,7 +6,7 @@
 /*   By: widraugr <marvin@42.fr>                    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/11/17 08:19:33 by widraugr          #+#    #+#             */
-/*   Updated: 2020/11/17 09:12:53 by mixfon           ###   ########.fr       */
+/*   Updated: 2020/11/17 09:15:52 by mixfon           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -59,6 +59,7 @@ int		main(int ac, char **av)
 {
 	int i;
 
+	i = 0;
 	infill_default_flags();
 	check_parametes(ac, av);
 	set_signals();

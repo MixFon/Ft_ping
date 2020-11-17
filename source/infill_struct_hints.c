@@ -6,7 +6,7 @@
 /*   By: widraugr <marvin@42.fr>                    +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/11/17 08:08:59 by widraugr          #+#    #+#             */
-/*   Updated: 2020/11/17 08:24:45 by widraugr         ###   ########.fr       */
+/*   Updated: 2020/11/17 09:17:01 by mixfon           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -52,7 +52,7 @@ void	infill_icmp_heder(struct icmp *icmp_heder)
 ** Сохранение временной точки отправления сообщения (struct timeval).
 */
 
-int		check_recvmsg(unsigned char *buf, int len)
+int		check_recvmsg(unsigned char *buf, size_t len)
 {
 	struct icmp		recv_icmp;
 	unsigned short	temp;
