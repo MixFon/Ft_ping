@@ -6,7 +6,7 @@
 /*   By: mixfon <marvin@42.fr>                      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2020/10/22 10:41:19 by mixfon            #+#    #+#             */
-/*   Updated: 2020/11/17 08:56:49 by widraugr         ###   ########.fr       */
+/*   Updated: 2020/11/17 09:06:01 by widraugr         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,7 +24,6 @@
 # include <signal.h>
 # include <stdio.h>
 # include <stdlib.h>
-//# include "../libft/libft.h"
 
 # include <netinet/ip.h>
 # include <netinet/in.h>
